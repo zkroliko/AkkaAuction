@@ -1,11 +1,8 @@
 
 import akka.actor._
-import akka.dispatch.sysmsg.Create
 import akka.event.LoggingReceive
 import org.joda.time.DateTime
-import scala.concurrent.Await
-import scala.concurrent.duration._
-
+import com.github.nscala_time.time.Imports._
 
 object Action {
 
@@ -19,35 +16,55 @@ object Action {
 
   case class Bid(proposed : BigDecimal) {}
 
-  case class BidAck(accepted : BigDecimal) {}
+  trait BidResult
 
-  case class BidNack(price : BigDecimal){}
+  case class BidAck(accepted : BigDecimal) extends BidResult{}
+
+  case class BidNack(price : BigDecimal) extends BidResult{}
 
 }
 
-class Auction extends Actor {
+class Auction(startingPrice: BigDecimal) extends Actor {
   import Action._
 
-  var startingPrice = BigDecimal
+  var seller: Option[ActorRef] = None
+  var currentPrice: BigDecimal = startingPrice
+  var endDate: DateTime = DateTime.now + 1000.years
 
-  def receive = LoggingReceive {
-    case Start(end) => context.become(created(end))
+  def checkBid(price: BigDecimal): BidResult = {
+    if (price > currentPrice && DateTime.now < endDate) {
+      currentPrice = price
+      BidAck(price)
+    } else {
+      BidNack(currentPrice)
+    }
   }
 
-  def created(end: DateTime): Receive = LoggingReceive {
-    case Bid(proposed) => context.become(activated(proposed))
+  def receive = LoggingReceive {
+    case Start(end) =>
+      seller = Some(sender)
+      endDate = end
+      context.become(created())
+  }
+
+  def created(): Receive = LoggingReceive {
+    case Bid(proposed) =>
+      sender ! checkBid(proposed)
+      context.become(activated(proposed))
   }
 
   def activated(current : BigDecimal): Receive = LoggingReceive {
-    case Bid(proposed) => context.become(activated(proposed))
+    case Bid(proposed) =>
+      sender ! checkBid(proposed)
+      context.become(activated(proposed))
   }
 
   def ignored(starting : BigDecimal): Receive = LoggingReceive {
-    case Bid(proposed) => context.become(activated(proposed))
+    case Bid(proposed) => ClosingInfo(endDate)
   }
 
   def sold(endPrice : BigDecimal): Receive = LoggingReceive {
-    case Bid(proposed) => context.become(activated(proposed))
+    case Bid(proposed) => ClosingInfo(endDate)
   }
 
 }
