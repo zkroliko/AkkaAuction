@@ -33,4 +33,8 @@ class Auction extends Actor {
     case Bid(proposed) =>
   }
 
+  def activated(starting : BigDecimal): Receive = LoggingReceive {
+    case Bid(proposed) =>
+  }
+
 }
