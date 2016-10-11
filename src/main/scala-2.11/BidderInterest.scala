@@ -9,7 +9,7 @@ object BidderInterest {
   case class ShouldIBid(price: BigDecimal)
   case class CanBid(maxAddition: BigDecimal)
   case class CantBid()
-  case class Overbid(ammount: BigDecimal)
+  case class Overbid(amount: BigDecimal)
 }
 
 class BidderInterest(val parent: ActorRef, val myAuction: ActorRef) extends Actor{
@@ -30,8 +30,8 @@ class BidderInterest(val parent: ActorRef, val myAuction: ActorRef) extends Acto
       context.become(finished)
   }
 
-  private def bid(bidAmmount: BigDecimal): Unit = {
-    myBid = bidAmmount
+  private def bid(bidAmount: BigDecimal): Unit = {
+    myBid = bidAmount
     myAuction ! bid(myBid)
     context.become(waitingForBidResult)
   }
