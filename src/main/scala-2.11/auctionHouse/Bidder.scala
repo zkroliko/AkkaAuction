@@ -1,18 +1,20 @@
-import _root_.Auction.{Bid, PriceInfo, Lost, Won}
-import akka.actor.{Props, ActorRef, Actor}
-import akka.event.LoggingReceive
+package auctionHouse
+
+import akka.actor.{Actor, ActorRef, Props}
+import akka.event.{Logging, LoggingReceive}
+import auctionHouse.Auction.{Lost, Won}
 
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
 
-class Bidder extends Actor{
+class Bidder extends Actor with akka.actor.ActorLogging{
 
   import BidderInterest._
 
-  val buyProbability = 0.2
+  val bidProbability = 0.3
   val bidRatio = 1.05
 
-  var neededItems = Random.nextInt()%10
+  var neededItems = Math.abs(Random.nextInt().toDouble)%10+1
   var budgetLeft = BigDecimal(Random.nextDouble())*10000
 
   var interests = ListBuffer[ActorRef]()
@@ -22,13 +24,13 @@ class Bidder extends Actor{
   private def canAfford(price: BigDecimal): Boolean = price*bidRatio <= budgetLeft
 
   private def considerBidding(interest: ActorRef, price: BigDecimal) = {
-    if (needMore && canAfford(price) && Random.nextDouble() < buyProbability) {
+    if (needMore && canAfford(price) && Random.nextDouble() < bidProbability) {
       neededItems -= 1
       val invested = price*bidRatio
       budgetLeft -= invested
-      sender ! CanBid(invested)
+      interest ! CanBid(invested)
     } else {
-      sender ! CantBid
+      interest ! CantBid
     }
   }
 
@@ -38,6 +40,7 @@ class Bidder extends Actor{
   }
 
   private def spawnInterests(auctions: List[ActorRef]) = {
+    println(s"Bidder $self looking at ${auctions.length} auctions")
     val additions = auctions.map(a => context.actorOf(Props(new BidderInterest(self,a))))
     interests ++= additions
   }
@@ -51,7 +54,7 @@ class Bidder extends Actor{
   }
 
   def receive = LoggingReceive {
-    case AuctionHouse.AuctionList(positions) =>
+    case AuctionHouse.AuctionList(positions) => spawnInterests(positions)
     case ShouldIBid(price) => considerBidding(sender, price)
     case Overbid(returned) => acknowledgeOverbid(returned)
     case Won(price) => acknowledgeWinning(sender)
