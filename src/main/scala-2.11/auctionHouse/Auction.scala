@@ -31,7 +31,7 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
 
   var seller: Option[ActorRef] = None
   var currentPrice: BigDecimal = startingPrice
-  var endDate: DateTime = DateTime.now + 1000.years
+  var endTime: DateTime = DateTime.now + 1000.years
 
   val interested = ListBuffer[ActorRef]()
   val bidders = ListBuffer[ActorRef]()
@@ -41,7 +41,7 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
   }
 
   private def checkBid(price: BigDecimal): BidResult = {
-    if (price > currentPrice && DateTime.now < endDate) {
+    if (price > currentPrice && DateTime.now < endTime) {
       println(s"Valid bid placed of $price over $currentPrice on: $item: at ${DateTime.now}")
       currentPrice = price
       BidAck(price)
@@ -56,11 +56,16 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
     sender ! PriceInfo(currentPrice)
   }
 
+  private def informOfClosing(sender: ActorRef) = {
+    interested += sender
+    sender ! ClosingInfo(endTime)
+  }
+
   def receive = LoggingReceive {
     case Start(end) =>
       seller = Some(sender)
-      endDate = end
-      println(s"Auction for: $item for $currentPrice from seller $seller started, and will end at $endDate")
+      endTime = end
+      println(s"Auction for: $item for $currentPrice from seller $seller started, and will end at $endTime")
       context.become(created())
     case AskPrice =>
       interested += sender
@@ -75,9 +80,7 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
       informInterested()
       context.become(activated(proposed))
     case AskPrice => informOfPrice(sender)
-    case ClosingInfo =>
-      interested += sender
-      sender ! ClosingInfo
+    case ClosingInfo => informOfClosing(sender)
   }
 
   def activated(current : BigDecimal): Receive = LoggingReceive {
@@ -85,9 +88,7 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
       sender ! checkBid(proposed)
       informInterested()
     case AskPrice => informOfPrice(sender)
-    case ClosingInfo =>
-      interested += sender
-      sender ! ClosingInfo
+    case ClosingInfo => informOfClosing(sender)
   }
 
   def ignored(starting : BigDecimal): Receive = LoggingReceive {
