@@ -17,9 +17,7 @@ object Auction {
   case object Start
   case object AskPrice
   case class PriceInfo(current : BigDecimal)
-  case class ClosingInfo(time: DateTime)
   case class Bid(proposed : BigDecimal)
-  case class TimerExpired(time : DateTime)
   case class Closed()
   case class Inactive()
   trait BidResult
@@ -28,6 +26,9 @@ object Auction {
   trait ParticipationResult
   case class Won(price : BigDecimal) extends ParticipationResult
   case class Lost() extends ParticipationResult
+  // For timer
+  case class BidTimerExpired(time : DateTime)
+  case class DeleteTimerExpired(time : DateTime)
 
 }
 
@@ -66,14 +67,9 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
     sender ! PriceInfo(currentPrice)
   }
 
-  private def informOfClosing(sender: ActorRef) = {
-    interested += sender
-    sender ! ClosingInfo(endTime)
-  }
-
   private def restartTimer() = {
     endTime = DateTime.now+bidWaitDuration.toSeconds
-    system.scheduler.scheduleOnce(bidWaitDuration,self,TimerExpired(endTime))
+    system.scheduler.scheduleOnce(bidWaitDuration,self,BidTimerExpired(endTime))
   }
 
   def receive = LoggingReceive {
@@ -95,12 +91,11 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
       informInterested()
       println(s"Auction $this activated")
       context.become(activated(proposed))
-    case TimerExpired(time) => if (time == endTime) {
+    case BidTimerExpired(time) => if (time == endTime) {
       println(s"Timer expired at $endTime, item ignored")
       context.become(ignored())
     }
     case AskPrice => informOfPrice(sender)
-    case ClosingInfo => informOfClosing(sender)
   }
 
   def activated(current : BigDecimal): Receive = LoggingReceive {
@@ -108,12 +103,11 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
       restartTimer()
       sender ! checkBid(proposed)
       informInterested()
-    case TimerExpired(time) => if (time == endTime) {
-      println(s"Timer expired for $this at $endTime, item sold to $")
+    case BidTimerExpired(time) => if (time == endTime) {
+      println(s"Timer expired for $this at $endTime, item sold to: ")
       context.become(sold(currentPrice))
     }
     case AskPrice => informOfPrice(sender)
-    case ClosingInfo => informOfClosing(sender)
   }
 
   def ignored(): Receive = LoggingReceive {
