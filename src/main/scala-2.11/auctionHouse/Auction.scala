@@ -16,13 +16,13 @@ object Auction {
 
   case object Start
   case object AskPrice
-  case class PriceInfo(current : BigDecimal)
+  case class Info(current : BigDecimal)
   case class Bid(proposed : BigDecimal)
   case class Closed()
   case class Inactive()
   trait BidResult
-  case class BidAck(accepted : BigDecimal) extends BidResult
-  case class BidNack(price : BigDecimal) extends BidResult
+  case class BidAck(bid: Bid) extends BidResult
+  case class BidNack(bid: Bid) extends BidResult
   trait ParticipationResult
   case class Won(price : BigDecimal) extends ParticipationResult
   case class Lost() extends ParticipationResult
@@ -40,33 +40,37 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
 
 
   var seller: Option[ActorRef] = None
-  var currentPrice: BigDecimal = startingPrice
+  var currentBid: Option[Bid] = None
+  def currentPrice: BigDecimal = if (currentBid.nonEmpty) currentBid.get.proposed else startingPrice
   var endTime: DateTime = DateTime.now + ignoredDuration.toSeconds
 
   val system = ActorSystem("timingSystem")
   import system.dispatcher
 
   val interested = ListBuffer[ActorRef]()
-  val bidders = ListBuffer[ActorRef]()
+  val bids = ListBuffer[Bid]()
 
   private def informInterested(): Unit = {
-    interested.foreach(_ ! PriceInfo(currentPrice))
+    interested.foreach(_ ! Info(currentPrice))
   }
 
-  private def checkBid(price: BigDecimal): BidResult = {
-    if (price > currentPrice && DateTime.now < endTime) {
-      println(s"Valid bid placed of $price over $currentPrice on: $item: at ${DateTime.now}")
-      currentPrice = price
-      BidAck(price)
+  private def processedBid(bid: Bid): BidResult = {
+    val proposed = bid.proposed
+    if (proposed > currentPrice && DateTime.now < endTime) {
+      println(s"Valid bid placed of $proposed over $currentPrice on: $item: at ${DateTime.now}")
+      currentBid = Some(bid)
+      informInterested()
+      restartTimer()
+      BidAck(bid)
     } else {
-      println(s"Invalid bid placed of $price on: $item: $currentPrice at ${DateTime.now}")
-      BidNack(currentPrice)
+      println(s"Invalid bid placed of $proposed on: $item: $currentPrice at ${DateTime.now}")
+      BidNack(bid)
     }
   }
 
   private def informOfPrice(sender: ActorRef) = {
     interested += sender
-    sender ! PriceInfo(currentPrice)
+    sender ! Info(currentPrice)
   }
 
   private def restartTimer() = {
@@ -91,13 +95,16 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
   }
 
   def created(): Receive = LoggingReceive {
-    case Bid(proposed) =>
-      restartTimer()
-      sender ! checkBid(proposed)
+    case bid @ Bid(proposed) =>
       interested += sender
-      informInterested()
-      println(s"Auction $this activated")
-      context.become(activated(proposed))
+      val result = processedBid(bid)
+      result match {
+        case BidAck(value) =>
+          sender ! bid
+          println(s"Auction $this activated")
+          context.become(activated(proposed))
+        case BidNack(value) =>
+      }
     case BidTimerExpired(time) => if (time == endTime) {
       println(s"Timer expired for $this at $endTime, item ignored")
       startDeleteTimer()
@@ -107,12 +114,11 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
   }
 
   def activated(current : BigDecimal): Receive = LoggingReceive {
-    case Bid(proposed) =>
-      restartTimer()
-      sender ! checkBid(proposed)
-      informInterested()
+    case bid @ Bid(proposed) =>
+      interested += sender
+      sender ! processedBid(bid)
     case BidTimerExpired(time) => if (time == endTime) {
-      println(s"Timer expired for $this at $endTime, item sold to: ")
+      println(s"Timer expired for $this at $endTime, item sold to:")
       context.become(sold(currentPrice))
     }
     case AskPrice => informOfPrice(sender)
