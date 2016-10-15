@@ -28,7 +28,7 @@ object Auction {
   case class Lost() extends ParticipationResult
   // For timer
   case class BidTimerExpired(time : DateTime)
-  case class DeleteTimerExpired(time : DateTime)
+  object DeleteTimerExpired
 
 }
 
@@ -36,12 +36,14 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
   import Auction._
 
   val bidWaitDuration = Duration.create(5,TimeUnit.SECONDS)
+  val ignoredDuration = Duration.create(15,TimeUnit.SECONDS)
+
 
   var seller: Option[ActorRef] = None
   var currentPrice: BigDecimal = startingPrice
-  var endTime: DateTime = DateTime.now + bidWaitDuration.toSeconds
+  var endTime: DateTime = DateTime.now + ignoredDuration.toSeconds
 
-  val system = ActorSystem("bidTimeSystem")
+  val system = ActorSystem("timingSystem")
   import system.dispatcher
 
   val interested = ListBuffer[ActorRef]()
@@ -68,8 +70,13 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
   }
 
   private def restartTimer() = {
-    endTime = DateTime.now+bidWaitDuration.toSeconds
+    endTime = DateTime.now+ignoredDuration.toSeconds
     system.scheduler.scheduleOnce(bidWaitDuration,self,BidTimerExpired(endTime))
+  }
+
+  private def startDeleteTimer() = {
+    system.scheduler.scheduleOnce(ignoredDuration,self,DeleteTimerExpired)
+
   }
 
   def receive = LoggingReceive {
@@ -92,7 +99,8 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
       println(s"Auction $this activated")
       context.become(activated(proposed))
     case BidTimerExpired(time) => if (time == endTime) {
-      println(s"Timer expired at $endTime, item ignored")
+      println(s"Timer expired for $this at $endTime, item ignored")
+      startDeleteTimer()
       context.become(ignored())
     }
     case AskPrice => informOfPrice(sender)
@@ -114,6 +122,9 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
     case Bid(proposed) =>
       interested += sender
       sender ! Closed
+    case DeleteTimerExpired =>
+      println(s"Delete timer expired for $this at ${DateTime.now()}, auction deleted")
+      context.stop(self)
     case _ =>
       interested += sender
       sender ! Inactive
