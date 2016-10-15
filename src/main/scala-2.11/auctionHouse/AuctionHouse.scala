@@ -1,8 +1,10 @@
 package auctionHouse
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import com.github.nscala_time.time.Imports._
-import org.joda.time.DateTime
+import scala.concurrent.duration.Duration
 
 object AuctionHouse extends App {
 
@@ -13,7 +15,7 @@ object AuctionHouse extends App {
   val bidder = system.actorOf(Props[Bidder])
   val bidder2 = system.actorOf(Props[Bidder])
 
-  auction ! Auction.Start(DateTime.now +5.days )
+  auction ! Auction.Start
   bidder ! AuctionList(List(auction))
   bidder2 ! AuctionList(List(auction))
 }

@@ -1,20 +1,25 @@
 package auctionHouse
 
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor._
 import akka.event.LoggingReceive
+import auctionHouse.Auction.AskPrice
 import com.github.nscala_time.time.Imports._
-import org.joda.time.DateTime
+
 
 import scala.collection.mutable.ListBuffer
+import scala.concurrent.duration.Duration
 
 object Auction {
 
-  case class Start(end: DateTime)
-  case class AskPrice()
+  case object Start
+  case object AskPrice
   case class PriceInfo(current : BigDecimal)
   case class ClosingInfo(time: DateTime)
   case class Bid(proposed : BigDecimal)
+  case class TimerExpired(time : DateTime)
   case class Closed()
   case class Inactive()
   trait BidResult
@@ -29,9 +34,14 @@ object Auction {
 class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
   import Auction._
 
+  val bidWaitDuration = Duration.create(5,TimeUnit.SECONDS)
+
   var seller: Option[ActorRef] = None
   var currentPrice: BigDecimal = startingPrice
-  var endTime: DateTime = DateTime.now + 1000.years
+  var endTime: DateTime = DateTime.now + bidWaitDuration.toSeconds
+
+  val system = ActorSystem("bidTimeSystem")
+  import system.dispatcher
 
   val interested = ListBuffer[ActorRef]()
   val bidders = ListBuffer[ActorRef]()
@@ -61,37 +71,52 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
     sender ! ClosingInfo(endTime)
   }
 
+  private def restartTimer() = {
+    endTime = DateTime.now+bidWaitDuration.toSeconds
+    system.scheduler.scheduleOnce(bidWaitDuration,self,TimerExpired(endTime))
+  }
+
   def receive = LoggingReceive {
-    case Start(end) =>
+    case Start =>
       seller = Some(sender)
-      endTime = end
+      restartTimer()
       println(s"Auction for: $item for $currentPrice from seller $seller started, and will end at $endTime")
+      informInterested()
       context.become(created())
-    case AskPrice =>
-      interested += sender
-      sender ! Inactive
+    case AskPrice => informOfPrice(sender)
     case _ => sender ! Inactive
   }
 
   def created(): Receive = LoggingReceive {
     case Bid(proposed) =>
+      restartTimer()
       sender ! checkBid(proposed)
       interested += sender
       informInterested()
+      println(s"Auction $this activated")
       context.become(activated(proposed))
+    case TimerExpired(time) => if (time == endTime) {
+      println(s"Timer expired at $endTime, item ignored")
+      context.become(ignored())
+    }
     case AskPrice => informOfPrice(sender)
     case ClosingInfo => informOfClosing(sender)
   }
 
   def activated(current : BigDecimal): Receive = LoggingReceive {
     case Bid(proposed) =>
+      restartTimer()
       sender ! checkBid(proposed)
       informInterested()
+    case TimerExpired(time) => if (time == endTime) {
+      println(s"Timer expired for $this at $endTime, item sold to $")
+      context.become(sold(currentPrice))
+    }
     case AskPrice => informOfPrice(sender)
     case ClosingInfo => informOfClosing(sender)
   }
 
-  def ignored(starting : BigDecimal): Receive = LoggingReceive {
+  def ignored(): Receive = LoggingReceive {
     case Bid(proposed) =>
       interested += sender
       sender ! Closed
@@ -101,9 +126,7 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
   }
 
   def sold(endPrice : BigDecimal): Receive = LoggingReceive {
-    case Bid(proposed) => sender ! Closed
-    case _ =>
-      sender ! Closed
+    case _ => sender ! Closed
   }
 
 }
