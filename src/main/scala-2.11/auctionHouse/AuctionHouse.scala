@@ -1,17 +1,19 @@
 package auctionHouse
 
-import java.util.concurrent.TimeUnit
-
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import auctionHouse.Auction.Start
-import com.github.nscala_time.time.Imports._
-import scala.concurrent.duration.Duration
 
 object AuctionHouse extends App {
 
+  implicit class ReadableActorRef(ref: AnyRef) {
+    def id: String = {
+      s"-${Integer.toHexString(ref.hashCode).toUpperCase}-"
+    }
+  }
+
   case class AuctionList(auctions: List[ActorRef])
 
-  val nAuctions = 20
+  val nAuctions = 1
   val nBidders = 4
 
   val system = ActorSystem("auctionHouse")

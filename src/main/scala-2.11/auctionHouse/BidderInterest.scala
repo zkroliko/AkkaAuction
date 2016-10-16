@@ -1,9 +1,10 @@
 package auctionHouse
 
 import akka.actor.{Actor, ActorRef}
-import akka.event.{Logging, LoggingReceive}
-import auctionHouse.Auction.{Lost, Info, AskForInfo}
-import auctionHouse.BidderInterest.{Overbid, CantBid, CanBid, ShouldIBid}
+import akka.event.LoggingReceive
+import auctionHouse.BidderInterest.{CanBid, CantBid, Overbid, ShouldIBid}
+import auctionHouse.AuctionHouse.ReadableActorRef
+
 
 object BidderInterest {
   case class ShouldIBid(price: BigDecimal)
@@ -12,11 +13,11 @@ object BidderInterest {
   case class Overbid(amount: BigDecimal)
 }
 
-class BidderInterest(val parent: ActorRef, val myAuction: ActorRef) extends Actor{
-
-  val log = Logging(context.system, this)
+class BidderInterest(parent_ : ActorRef, val myAuction: ActorRef) extends Actor {
 
   import Auction._
+
+  val parent = parent_
 
   var knownPrice: BigDecimal = 0
   var myBid: BigDecimal = 0
@@ -30,7 +31,7 @@ class BidderInterest(val parent: ActorRef, val myAuction: ActorRef) extends Acto
         parent ! ShouldIBid(price)
     case CanBid(maxOverbid) if sender == parent => bid(maxOverbid)
     case CantBid() if sender == parent =>
-    case l@Lost =>
+    case l@Lost() =>
       parent ! l
       context.become(finished)
   }
@@ -38,7 +39,7 @@ class BidderInterest(val parent: ActorRef, val myAuction: ActorRef) extends Acto
   private def bid(bidAmount: BigDecimal): Unit = {
     myBid = bidAmount
     myAuction ! Bid(myBid)
-    println(s"Bidder $self decided to bid on $myAuction for $bidAmount")
+    println(s"Bidder ${parent.id} decided to bid on auction ${myAuction.id} for '$bidAmount'")
     context.become(waitingForBidResult)
   }
 
@@ -46,10 +47,10 @@ class BidderInterest(val parent: ActorRef, val myAuction: ActorRef) extends Acto
     case BidAck(bid) =>
       knownPrice = myBid
       context.become(winning)
-    case BidNack(bid) =>
+    case BidNAck(bid) =>
       parent ! Overbid(myBid)
       context.become(receive)
-    case l@Lost =>
+    case l@Lost() =>
       parent ! Overbid(myBid)
       parent ! l
       context.become(finished)
@@ -60,13 +61,17 @@ class BidderInterest(val parent: ActorRef, val myAuction: ActorRef) extends Acto
       this.knownPrice == price
       parent ! Overbid(myBid)
       context.become(receive)
-    case w@Won =>
+    case w@Won(finalPrice) if sender == myAuction =>
+      println(s"Bidder ${parent.id} WON ${sender.id} for '$finalPrice'")
       parent ! w
+      context.become(finished)
+    case l@Lost() =>
+      parent ! Overbid(myBid)
+      parent ! l
       context.become(finished)
   }
 
   def finished = LoggingReceive {
     case _ =>
   }
-
 }

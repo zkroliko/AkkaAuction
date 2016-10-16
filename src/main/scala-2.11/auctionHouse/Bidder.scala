@@ -1,11 +1,12 @@
 package auctionHouse
 
 import akka.actor.{Actor, ActorRef, Props}
-import akka.event.{Logging, LoggingReceive}
+import akka.event.LoggingReceive
 import auctionHouse.Auction.{Lost, Won}
 
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
+import auctionHouse.AuctionHouse.ReadableActorRef
 
 class Bidder extends Actor with akka.actor.ActorLogging{
 
@@ -40,7 +41,7 @@ class Bidder extends Actor with akka.actor.ActorLogging{
   }
 
   private def spawnInterests(auctions: List[ActorRef]) = {
-    println(s"Bidder $self looking at ${auctions.length} auctions")
+    println(s"Bidder ${self.id} looking at ${auctions.length} auctions")
     val additions = auctions.map(a => context.actorOf(Props(new BidderInterest(self,a))))
     interests ++= additions
   }

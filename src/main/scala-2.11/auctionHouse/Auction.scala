@@ -5,12 +5,10 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor._
 import akka.event.LoggingReceive
-import auctionHouse.Auction.AskForInfo
 import com.github.nscala_time.time.Imports._
 import sun.plugin.dom.exception.InvalidStateException
+import auctionHouse.AuctionHouse.ReadableActorRef
 
-
-import scala.collection.mutable.ListBuffer
 import scala.concurrent.duration.Duration
 
 object Auction {
@@ -23,7 +21,7 @@ object Auction {
   case object Inactive
   trait BidResult
   case class BidAck(bid: Bid) extends BidResult
-  case class BidNack(bid: Bid) extends BidResult
+  case class BidNAck(bid: Bid) extends BidResult
   trait ParticipationResult
   case class Won(price : BigDecimal) extends ParticipationResult
   case class Lost() extends ParticipationResult
@@ -52,7 +50,7 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
 
   private def start() {
     restartTimer()
-    println(s"Auction for: $item for $currentPrice from seller $seller started, and will end at $endTime")
+    println(s"Auction ${self.id} for $currentPrice started, and will end at $endTime")
     informInterested()
     context.become(created)
   }
@@ -64,15 +62,15 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
   private def processedBid(bid: Bid, sender: ActorRef): BidResult = {
     val proposed = bid.proposed
     if (proposed > currentPrice) {
-      println(s"Valid bid placed of $proposed over $currentPrice on: $item: at ${DateTime.now}")
+      println(s"Valid bid of '$proposed' > '$currentPrice' placed on: ${self.id}: at ${DateTime.now}")
       currentBid = Some(bid)
       currentWinner = Some(sender)
       informInterested()
       restartTimer()
       BidAck(bid)
     } else {
-      println(s"Too low bid placed of $proposed on: $item: $currentPrice at ${DateTime.now}")
-      BidNack(bid)
+      println(s"Too low bid of '$proposed' placed on: ${self.id} at '$currentPrice' at ${DateTime.now}")
+      BidNAck(bid)
     }
   }
 
@@ -92,7 +90,7 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
     }
   }
 
-  private def informOfResult() = {
+  private def informOfResult() {
     currentWinner.getOrElse(throw new InvalidStateException("")) ! Won(currentPrice)
     interested.filter(_ != currentWinner.getOrElse(None)).foreach {
       _ ! Lost
@@ -123,12 +121,12 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
       result match {
         case BidAck(value) =>
           sender ! bid
-          println(s"Auction $this activated")
+          println(s"Auction ${self.id} activated")
           context.become(activated)
-        case BidNack(value) =>
+        case BidNAck(value) =>
       }
     case BidTimerExpired(time) => if (time == endTime) {
-      println(s"Timer expired for $this at $endTime, item ignored")
+      println(s"Timer expired for ${self.id} at $endTime, item ignored")
       startDeleteTimer()
       context.become(ignored)
     }
@@ -140,8 +138,8 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
       interested += sender
       sender ! processedBid(bid, sender)
     case BidTimerExpired(time) => if (time == endTime) {
-      println(s"Timer expired for $this at $endTime, item sold to: ${currentWinner.getOrElse("anonymous")}")
       informOfResult()
+      println(s"Timer expired for ${self.id}, item sold for '$currentPrice'.")
       context.become(sold)
     }
     case _ => inform(sender)
@@ -151,7 +149,7 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
     case Start if sender == seller.getOrElse(None) =>
       start()
     case DeleteTimerExpired =>
-      println(s"Delete timer expired for $this at ${DateTime.now()}, auction deleted")
+      println(s"Delete timer expired for ${self.id} at ${DateTime.now()}, auction deleted")
       context.stop(self)
     case _ =>
   }
