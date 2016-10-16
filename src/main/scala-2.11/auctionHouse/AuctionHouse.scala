@@ -13,8 +13,8 @@ object AuctionHouse extends App {
 
   case class AuctionList(auctions: List[ActorRef])
 
-  val nAuctions = 1
-  val nBidders = 4
+  val nAuctions = 10
+  val nBidders = 5
 
   val system = ActorSystem("auctionHouse")
   val auction = system.actorOf(Props(new Auction("a book",200.0)))

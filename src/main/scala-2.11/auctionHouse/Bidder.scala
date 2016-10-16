@@ -13,7 +13,10 @@ class Bidder extends Actor with akka.actor.ActorLogging{
   import BidderInterest._
 
   val bidProbability = 0.8
-  val bidRatio = 1.05
+  val bidRatioMin = 1.05
+  val bidRatioMax = 1.10
+
+  def randomBidRatio = bidRatioMin+Random.nextDouble*(bidRatioMax-bidRatioMin)
 
   var neededItems = Math.abs(Random.nextInt().toDouble)%10+1
   var budgetLeft = BigDecimal(Random.nextDouble())*10000
@@ -22,14 +25,14 @@ class Bidder extends Actor with akka.actor.ActorLogging{
 
   private def needMore: Boolean = neededItems > 0
 
-  private def canAfford(price: BigDecimal): Boolean = price*bidRatio <= budgetLeft
+  private def canAfford(price: BigDecimal): Boolean = price <= budgetLeft
 
   private def considerBidding(interest: ActorRef, price: BigDecimal) = {
-    if (needMore && canAfford(price) && Random.nextDouble() < bidProbability) {
+    val investment = price*randomBidRatio
+    if (needMore && canAfford(investment) && Random.nextDouble() < bidProbability) {
       neededItems -= 1
-      val invested = price*bidRatio
-      budgetLeft -= invested
-      interest ! CanBid(invested)
+      budgetLeft -= investment
+      interest ! CanBid(investment)
     } else {
       interest ! CantBid
     }

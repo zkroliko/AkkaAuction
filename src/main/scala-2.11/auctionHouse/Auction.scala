@@ -139,7 +139,7 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
       sender ! processedBid(bid, sender)
     case BidTimerExpired(time) => if (time == endTime) {
       informOfResult()
-      println(s"Timer expired for ${self.id}, item sold for '$currentPrice'.")
+      println(s"Timer expired for ${self.id}, item sold for '$currentPrice' at ${DateTime.now}")
       context.become(sold)
     }
     case _ => inform(sender)
