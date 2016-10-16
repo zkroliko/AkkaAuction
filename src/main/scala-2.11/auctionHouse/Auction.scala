@@ -31,15 +31,13 @@ object Auction {
 
 }
 
-class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
+class Auction(startingPrice: BigDecimal) extends Actor {
   import Auction._
 
   val bidWaitDuration = Duration.create(5,TimeUnit.SECONDS)
-  val ignoredDuration = Duration.create(15,TimeUnit.SECONDS)
+  val ignoredDuration = Duration.create(10,TimeUnit.SECONDS)
 
-  var seller: Option[ActorRef] = None
-  var currentBid: Option[Bid] = None
-  def currentPrice: BigDecimal = if (currentBid.nonEmpty) currentBid.get.proposed else startingPrice
+  var currentPrice: BigDecimal = startingPrice
   var currentWinner : Option[ActorRef] = None
   var endTime: DateTime = DateTime.now + ignoredDuration.toSeconds
 
@@ -63,7 +61,7 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
     val proposed = bid.proposed
     if (proposed > currentPrice) {
       println(s"Valid bid of '$proposed' > '$currentPrice' placed on: ${self.id}: at ${DateTime.now}")
-      currentBid = Some(bid)
+      currentPrice = bid.proposed
       currentWinner = Some(sender)
       informInterested()
       restartTimer()
@@ -71,22 +69,6 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
     } else {
       println(s"Too low bid of '$proposed' placed on: ${self.id} at '$currentPrice' at ${DateTime.now}")
       BidNAck(bid)
-    }
-  }
-
-  private def inform(sender: ActorRef) = {
-    interested += sender
-    context match {
-      case created =>
-        interested += sender
-        sender ! Info(currentPrice,currentWinner)
-      case activated =>
-        interested += sender
-        sender ! Info(currentPrice,currentWinner)
-      case ignored =>
-        interested += sender
-        sender ! Inactive
-      case sold => sender ! Closed
     }
   }
 
@@ -109,9 +91,10 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
 
   def receive = LoggingReceive {
     case Start =>
-      seller = Some(sender)
       start()
-    case _ => inform(sender)
+    case _ =>
+      interested += sender
+      sender ! Info(currentPrice,currentWinner)
   }
 
   def created: Receive = LoggingReceive {
@@ -130,7 +113,9 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
       startDeleteTimer()
       context.become(ignored)
     }
-    case _ => inform(sender)
+    case _ =>
+      interested += sender
+      sender ! Info(currentPrice,currentWinner)
   }
 
   def activated: Receive = LoggingReceive {
@@ -142,11 +127,13 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
       println(s"Timer expired for ${self.id}, item sold for '$currentPrice' at ${DateTime.now}")
       context.become(sold)
     }
-    case _ => inform(sender)
+    case _ =>
+      interested += sender
+      sender ! Inactive
   }
 
   def ignored: Receive = LoggingReceive {
-    case Start if sender == seller.getOrElse(None) =>
+    case Start =>
       start()
     case DeleteTimerExpired =>
       println(s"Delete timer expired for ${self.id} at ${DateTime.now()}, auction deleted")
@@ -155,7 +142,7 @@ class Auction(val item: String, startingPrice: BigDecimal) extends Actor {
   }
 
   def sold: Receive = LoggingReceive {
-    case _ => inform(sender)
+    case _ => sender ! Closed
   }
 
 }
