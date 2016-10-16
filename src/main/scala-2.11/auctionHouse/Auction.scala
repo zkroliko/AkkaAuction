@@ -4,15 +4,12 @@ package auctionHouse
 import java.util.concurrent.TimeUnit
 
 import akka.actor._
-import akka.event.LoggingReceive
-import auctionHouse.Auction.{Data, State}
+import auctionHouse.Auction._
+import auctionHouse.AuctionHouse.ReadableActorRef
 import com.github.nscala_time.time.Imports._
 import sun.plugin.dom.exception.InvalidStateException
-import auctionHouse.AuctionHouse.ReadableActorRef
 
 import scala.collection.immutable.SortedSet
-import scala.collection.parallel
-import scala.collection.parallel.immutable
 import scala.concurrent.duration.Duration
 
 object Auction {
@@ -20,18 +17,22 @@ object Auction {
   val bidWaitDuration = Duration.create(5,TimeUnit.SECONDS)
   val ignoredDuration = Duration.create(15,TimeUnit.SECONDS)
 
-  final case class Start()
+  case object Start
   case object AskForInfo
-  case class Info(current : BigDecimal, leader: Option[ActorRef])
-  case class Bid(proposed : BigDecimal)
   case object Closed
   case object Inactive
+
+  case class Info(current : BigDecimal, leader: Option[ActorRef])
+  case class Bid(proposed : BigDecimal)
+
   trait BidResult
   case class BidAck(bid: Bid) extends BidResult
   case class BidNAck(bid: Bid) extends BidResult
+
   trait ParticipationResult
   case class Won(price : BigDecimal) extends ParticipationResult
   case class Lost() extends ParticipationResult
+
   // For timer
   case class BidTimerExpired(time : DateTime)
   object DeleteTimerExpired
@@ -44,49 +45,29 @@ object Auction {
   case object Sold extends State
 
   sealed trait Data
-
-  final case class Uninitialized(startingPrice: BigDecimal,
-                                 interested: SortedSet[ActorRef]
-                                ) extends Data
-  final case class Initialized(startingPrice: BigDecimal,
-                                interested: SortedSet[ActorRef],
-                               endTime: DateTime
-                              ) extends Data
-
-  final case class Bidding(price: BigDecimal,
-                           interested: SortedSet[ActorRef],
-                           endTime: DateTime,
-                           currentWinner: ActorRef
-                          ) extends Data
+  final case class Uninitialized(startingPrice: BigDecimal,interested: SortedSet[ActorRef]) extends Data
+  final case class WaitingData(startingPrice: BigDecimal, interested: SortedSet[ActorRef],
+                               endTime: DateTime) extends Data
+  final case class BiddingData(price: BigDecimal, interested: SortedSet[ActorRef], endTime: DateTime,
+                               currentWinner: ActorRef) extends Data
+  final case class IgnoredData(price: BigDecimal, interested: SortedSet[ActorRef]) extends Data
+  final case class SoldData(endPrice: BigDecimal, winner: ActorRef) extends Data
 }
 
 class Auction(startingPrice: BigDecimal) extends FSM[State, Data] {
   import Auction._
 
-  startWith(Idle,Uninitialized(startingPrice,SortedSet()))
-
   val system = ActorSystem("timingSystem")
   import system.dispatcher
 
-  private def start() {
-    withRestartedTimer()
-    println(s"Auction ${self.id} for $currentPrice started, and will end at $endTime")
-    informInterested()
-    goto(Created)
+  private def informInterested(interested: SortedSet[ActorRef], price: BigDecimal, winning: Option[ActorRef]): Unit = {
+    interested.foreach(_ ! Info(price,winning))
   }
 
-  private def informInterested(): Unit = {
-    interested.foreach(_ ! Info(currentPrice,currentWinner))
-  }
-
-  private def processedBid(bid: Bid, sender: ActorRef): BidResult = {
+  private def processedBid(bid: Bid, currentPrice: BigDecimal, sender: ActorRef): BidResult = {
     val proposed = bid.proposed
     if (proposed > currentPrice) {
       println(s"Valid bid of '$proposed' > '$currentPrice' placed on: ${self.id}: at ${DateTime.now}")
-      currentBid = Some(bid)
-      currentWinner = Some(sender)
-      informInterested()
-      withRestartedTimer()
       BidAck(bid)
     } else {
       println(s"Too low bid of '$proposed' placed on: ${self.id} at '$currentPrice' at ${DateTime.now}")
@@ -94,24 +75,14 @@ class Auction(startingPrice: BigDecimal) extends FSM[State, Data] {
     }
   }
 
-  private def inform(sender: ActorRef) = {
-    context match {
-      case activated =>
-        sender ! Info(currentPrice,currentWinner)
-      case ignored =>
-        sender ! Inactive
-      case sold => sender ! Closed
-    }
-  }
-
-  private def informOfResult() {
-    currentWinner.getOrElse(throw new InvalidStateException("")) ! Won(currentPrice)
+  private def informOfResult(interested: SortedSet[ActorRef], currentWinner: Option[ActorRef], price: BigDecimal) {
+    currentWinner.getOrElse(throw new InvalidStateException("")) ! Won(price)
     interested.filter(_ != currentWinner.getOrElse(None)).foreach {
       _ ! Lost
     }
   }
 
-  private def withRestartedTimer(): DateTime = {
+  private def restartedTimer(): DateTime = {
     val endTime = DateTime.now+ignoredDuration.toSeconds
     system.scheduler.scheduleOnce(bidWaitDuration,self,BidTimerExpired(endTime))
     endTime
@@ -122,63 +93,83 @@ class Auction(startingPrice: BigDecimal) extends FSM[State, Data] {
 
   }
 
+
+  startWith(Idle,Uninitialized(startingPrice,SortedSet()))
+
   when(Idle) {
-    case Event(Start(), Uninitialized(price,interested)) =>
-      val endTime = withRestartedTimer()
-      println(s"Auction ${self.id} for $price started, and will end at $endTime")
-      informInterested()
-      goto(Created) using Initialized(price,interested,endTime)
-    case Event(_,Uninitialized(price,interested)) =>
+    case Event(Start, Uninitialized(price,interested)) =>
+      val endTime = restartedTimer()
+      println(s"Auction ${self.id} for $price created, and will end at $endTime")
+      informInterested(interested,price,None)
+      goto(Created) using WaitingData(price,interested,endTime)
+    case Event(AskForInfo,Uninitialized(price,interested)) =>
       sender ! Info(price,None)
-      goto(Idle) using Uninitialized(price,interested+sender)
+      stay() using Uninitialized(price,interested+sender)
   }
 
   when(Created) {
-    case Event(bid @ Bid(proposed),Initialized(starting,interested,endTime)) =>
-      interested += sender
-      val result = processedBid(bid,sender)
+    case Event(bid@Bid(proposed), WaitingData(currentPrice, interested, endTime)) =>
+      val result = processedBid(bid, currentPrice, sender)
+      sender ! result
       result match {
         case BidAck(value) =>
-          sender ! bid
           println(s"Auction ${self.id} activated")
-          goto(Activated) using Bidding(proposed,interested,endTime,sender)
+          goto(Activated) using BiddingData(proposed, interested + sender, restartedTimer(), sender)
         case BidNAck(value) =>
+          stay() using WaitingData(currentPrice, interested + sender, endTime)
       }
-    case Event(BidTimerExpired(time),Initialized(price,interested,endTime)) =>
+    case Event(BidTimerExpired(time), WaitingData(price, interested, endTime)) =>
       if (time == endTime) {
         println(s"Timer expired for ${self.id} at $endTime, item ignored")
         startDeleteTimer()
         goto(Ignored)
       } else {
-        goto(Created) using Initialized(price,interested,endTime)
+        stay()
       }
-    case Event(_,Initialized(price,interested,endTime)) =>
-      sender ! Info(price,None)
-      goto(Idle) using Initialized(price,interested+sender,endTime)
-
-  when(Activated) = {
-    case bid @ Bid(proposed) =>
-      interested += sender
-      sender ! processedBid(bid, sender)
-    case BidTimerExpired(time) => if (time == endTime) {
-      informOfResult()
-      println(s"Timer expired for ${self.id}, item sold for '$currentPrice' at ${DateTime.now}")
-      context.become(sold)
-    }
-    case _ => inform(sender)
+    case Event(_, WaitingData(price, interested, endTime)) =>
+      sender ! Info(price, None)
+      goto(Idle) using WaitingData(price, interested + sender, endTime)
   }
 
-  def ignored: Receive = LoggingReceive {
-    case Start if sender == seller.getOrElse(None) =>
-      start()
-    case DeleteTimerExpired =>
+  when(Activated) {
+    case Event(bid@Bid(proposed), BiddingData(price, interested, endTime, previousLeader)) =>
+      val result = processedBid(bid, price, sender)
+      sender ! result
+      result match {
+        case BidAck(value) =>
+          goto(Activated) using BiddingData(proposed, interested + sender, endTime, sender)
+        case BidNAck(value) =>
+          stay() using BiddingData(price, interested + sender, endTime, previousLeader)
+      }
+    case Event(BidTimerExpired(time), BiddingData(endPrice, interested, endTime, winner)) =>
+      if (time == endTime) {
+        informOfResult(interested,Some(winner),endPrice)
+        println(s"Timer expired for ${self.id}, item sold for '$endPrice' at ${DateTime.now}")
+        goto(Sold) using SoldData(endPrice,winner)
+      } else {
+        stay()
+      }
+    case Event(_, BiddingData(price, interested, endTime, currentLeader)) =>
+      sender ! Info(price, Some(currentLeader))
+      stay() using BiddingData(price, interested + sender, endTime, currentLeader)
+  }
+
+  when(Ignored) {
+    case Event(Start,IgnoredData(price,interested)) =>
+      val endTime = restartedTimer()
+      goto(Created) using WaitingData(price,interested,endTime)
+    case Event(DeleteTimerExpired,IgnoredData(price,interested)) =>
       println(s"Delete timer expired for ${self.id} at ${DateTime.now()}, auction deleted")
-      context.stop(self)
-    case _ =>
+      stay()
+    case Event(_,Uninitialized(price,interested)) =>
+      sender ! Info(price,None)
+      stay() using Uninitialized(price,interested+sender)
   }
 
-  def sold: Receive = LoggingReceive {
-    case _ => inform(sender)
+  when(Sold) {
+    case Event(_,SoldData(price,winner)) =>
+      sender ! Info(price,Some(winner))
+      stay()
   }
 
 }
