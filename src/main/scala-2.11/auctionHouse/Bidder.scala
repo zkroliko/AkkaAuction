@@ -11,7 +11,7 @@ class Bidder extends Actor with akka.actor.ActorLogging{
 
   import BidderInterest._
 
-  val bidProbability = 1.0
+  val bidProbability = 0.8
   val bidRatio = 1.05
 
   var neededItems = Math.abs(Random.nextInt().toDouble)%10+1

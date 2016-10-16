@@ -2,7 +2,7 @@ package auctionHouse
 
 import akka.actor.{Actor, ActorRef}
 import akka.event.{Logging, LoggingReceive}
-import auctionHouse.Auction.{Lost, Info, AskPrice}
+import auctionHouse.Auction.{Lost, Info, AskForInfo}
 import auctionHouse.BidderInterest.{Overbid, CantBid, CanBid, ShouldIBid}
 
 object BidderInterest {
@@ -21,12 +21,13 @@ class BidderInterest(val parent: ActorRef, val myAuction: ActorRef) extends Acto
   var knownPrice: BigDecimal = 0
   var myBid: BigDecimal = 0
 
-  myAuction ! AskPrice
+  myAuction ! AskForInfo
 
   def receive = LoggingReceive {
-    case Info(price) if sender == myAuction =>
+    case Info(price, winner) if sender == myAuction =>
       this.knownPrice == price
-      parent ! ShouldIBid(price)
+      if (winner.getOrElse(None) != self)
+        parent ! ShouldIBid(price)
     case CanBid(maxOverbid) if sender == parent => bid(maxOverbid)
     case CantBid() if sender == parent =>
     case l@Lost =>
@@ -55,7 +56,7 @@ class BidderInterest(val parent: ActorRef, val myAuction: ActorRef) extends Acto
   }
 
   def winning = LoggingReceive {
-    case Info(price) if sender == myAuction =>
+    case Info(price, winner) if sender == myAuction && winner.getOrElse(None) != self =>
       this.knownPrice == price
       parent ! Overbid(myBid)
       context.become(receive)
