@@ -22,7 +22,7 @@ class BidderInterest(parent_ : ActorRef, val myAuction: ActorRef) extends Actor 
   var knownPrice: BigDecimal = 0
   var myBid: BigDecimal = 0
 
-  myAuction ! AskForInfo
+  myAuction ! AskingForInfo
 
   def receive = LoggingReceive {
     case Info(price, winner) if sender == myAuction =>

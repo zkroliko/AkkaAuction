@@ -18,7 +18,7 @@ object Auction {
   val ignoredDuration = Duration.create(15,TimeUnit.SECONDS)
 
   case object Start
-  case object AskForInfo
+  case object AskingForInfo
   case object Closed
   case object Inactive
 
@@ -102,9 +102,9 @@ class Auction(startingPrice: BigDecimal) extends FSM[State, Data] {
       println(s"Auction ${self.id} for $price created, and will end at $endTime")
       informInterested(interested,price,None)
       goto(Created) using WaitingData(price,interested,endTime)
-    case Event(AskForInfo,Uninitialized(price,interested)) =>
-      sender ! Info(price,None)
-      stay() using Uninitialized(price,interested+sender)
+    case Event(AskingForInfo, u: Uninitialized) =>
+      sender ! Info(u.startingPrice,None)
+      stay() using u.copy (interested = u.interested+sender)
   }
 
   when(Created) {
@@ -128,7 +128,7 @@ class Auction(startingPrice: BigDecimal) extends FSM[State, Data] {
       }
     case Event(_, WaitingData(price, interested, endTime)) =>
       sender ! Info(price, None)
-      goto(Idle) using WaitingData(price, interested + sender, endTime)
+      stay() using WaitingData(price, interested + sender, endTime)
   }
 
   when(Activated) {
@@ -171,5 +171,7 @@ class Auction(startingPrice: BigDecimal) extends FSM[State, Data] {
       sender ! Info(price,Some(winner))
       stay()
   }
+
+  initialize()
 
 }
