@@ -114,6 +114,7 @@ class Auction(startingPrice: BigDecimal) extends FSM[State, Data] {
       result match {
         case BidAck(value) =>
           println(s"Auction ${self.id} activated")
+          informInterested(interested,currentPrice,Some(sender))
           goto(Activated) using BiddingData(proposed, interested + sender, restartedTimer(), sender)
         case BidNAck(value) =>
           stay() using WaitingData(currentPrice, interested + sender, endTime)
@@ -132,14 +133,15 @@ class Auction(startingPrice: BigDecimal) extends FSM[State, Data] {
   }
 
   when(Activated) {
-    case Event(bid@Bid(proposed), BiddingData(price, interested, endTime, previousLeader)) =>
-      val result = processedBid(bid, price, sender)
+    case Event(bid@Bid(proposed), BiddingData(currentPrice, interested, endTime, previousLeader)) =>
+      val result = processedBid(bid, currentPrice, sender)
       sender ! result
       result match {
         case BidAck(value) =>
+          informInterested(interested,currentPrice,Some(sender))
           goto(Activated) using BiddingData(proposed, interested + sender, endTime, sender)
         case BidNAck(value) =>
-          stay() using BiddingData(price, interested + sender, endTime, previousLeader)
+          stay() using BiddingData(currentPrice, interested + sender, endTime, previousLeader)
       }
     case Event(BidTimerExpired(time), BiddingData(endPrice, interested, endTime, winner)) =>
       if (time == endTime) {

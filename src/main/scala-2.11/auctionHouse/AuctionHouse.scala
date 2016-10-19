@@ -19,8 +19,8 @@ object AuctionHouse {
 class AuctionHouse extends Actor {
   import AuctionHouse._
 
-  val nAuctions = 10
-  val nBidders = 5
+  val nAuctions = 1
+  val nBidders = 2
 
   def receive = LoggingReceive {
     case Init =>

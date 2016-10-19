@@ -8,13 +8,20 @@ import scala.collection.mutable.ListBuffer
 import scala.util.Random
 import auctionHouse.AuctionHouse.ReadableActorRef
 
+object Bidder {
+
+  val maxBidRatio = 2.0
+  val maxBidRatioVar = 2.0
+
+  val bidProbability = 0.7
+  val bidRatioMin = 1.05
+  val bidRatioMax = 1.10
+}
+
 class Bidder extends Actor with akka.actor.ActorLogging{
 
   import BidderInterest._
-
-  val bidProbability = 0.8
-  val bidRatioMin = 1.05
-  val bidRatioMax = 1.10
+  import Bidder._
 
   def randomBidRatio = bidRatioMin+Random.nextDouble*(bidRatioMax-bidRatioMin)
 
@@ -25,11 +32,24 @@ class Bidder extends Actor with akka.actor.ActorLogging{
 
   private def needMore: Boolean = neededItems > 0
 
-  private def canAfford(price: BigDecimal): Boolean = price <= budgetLeft
+  private def isViableInvestment(price: BigDecimal)(implicit maxProfitablePrice: BigDecimal) : Boolean = {
+    needMore && canAfford(price)
+  }
 
-  private def considerBidding(interest: ActorRef, price: BigDecimal) = {
+  private def canAfford(price: BigDecimal)(implicit maxProfitablePrice: BigDecimal): Boolean =
+    isInBudget(price) && isProfitable(price)
+
+  private def isInBudget(price: BigDecimal): Boolean = {
+    price <= budgetLeft
+  }
+
+  private def isProfitable(price: BigDecimal)(implicit maxProfitablePrice: BigDecimal): Boolean = {
+    price <= budgetLeft
+  }
+  
+  private def considerBidding(interest: ActorRef, price: BigDecimal)(implicit profitableTo: BigDecimal) = {
     val investment = price*randomBidRatio
-    if (needMore && canAfford(investment) && Random.nextDouble() < bidProbability) {
+    if (isViableInvestment(price) && Random.nextDouble() < bidProbability) {
       neededItems -= 1
       budgetLeft -= investment
       interest ! CanBid(investment)
@@ -59,7 +79,7 @@ class Bidder extends Actor with akka.actor.ActorLogging{
 
   def receive = LoggingReceive {
     case AuctionHouse.AuctionList(positions) => spawnInterests(positions)
-    case ShouldIBid(price) => considerBidding(sender, price)
+    case ShouldIBid(price,profitableTo) => considerBidding(sender, price)(implicitly(profitableTo))
     case Overbid(returned) => acknowledgeOverbid(returned)
     case Won(price) => acknowledgeWinning(sender)
     case Lost() => acknowledgeLoosing(sender)
