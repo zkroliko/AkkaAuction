@@ -54,10 +54,10 @@ object Auction {
   final case class SoldData(endPrice: BigDecimal, winner: ActorRef) extends Data
 }
 
-class Auction(startingPrice: BigDecimal) extends FSM[State, Data] {
+class Auction(val title : String, val startingPrice: BigDecimal) extends FSM[State, Data] {
   import Auction._
 
-  val system = ActorSystem("timingSystem")
+  val system = context.system
   import system.dispatcher
 
   private def informInterested(interested: SortedSet[ActorRef], price: BigDecimal, winning: Option[ActorRef]): Unit = {
