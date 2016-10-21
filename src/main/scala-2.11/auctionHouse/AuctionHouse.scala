@@ -23,7 +23,8 @@ class AuctionHouse extends Actor {
 
   def receive = LoggingReceive {
     case Init =>
-      val auctions = (1 to nAuctions).map(n =>context.actorOf(Props(new Auction(n.toString,200.0+n)))).toList
+      val descriptions = (1 to nAuctions).map(n => AuctionDescription(n.toString,200.0+n))
+      val auctions = descriptions.map(desc =>context.actorOf(Props(new Auction(desc)))).toList
       val bidders = (1 to nBidders).map(n => context.actorOf(Props[Bidder])).toList
 
       auctions.foreach(_ ! Start)

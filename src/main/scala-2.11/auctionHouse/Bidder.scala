@@ -13,7 +13,7 @@ object Bidder {
   val maxBidRatio = 2.0
   val maxBidRatioVar = 2.0
 
-  val bidProbability = 0.7
+  val bidProbability = 1.0
   val bidRatioMin = 1.05
   val bidRatioMax = 1.10
 }

@@ -20,8 +20,13 @@ class Seller extends FSM[State,Data]{
 
   when(Waiting) {
     case Event(d: BuildFromDescriptions, UninitializedData) =>
-      val auctions = d.descriptions.map(n =>context.actorOf(Props(new Auction(n.title, n.price)))).toList
+      val auctions = d.descriptions.map(desc =>context.actorOf(Props(new Auction(desc)))).toList
       goto(AfterPostingAuctions) using AuctionListData(auctions)
+  }
+
+  when (AfterPostingAuctions){
+    case Event(Auction.Sold,a : AuctionListData) =>
+      stay()
   }
 
 }
