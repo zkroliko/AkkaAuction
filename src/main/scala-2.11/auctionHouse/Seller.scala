@@ -18,6 +18,8 @@ object Seller {
 
 class Seller extends FSM[State,Data]{
 
+  startWith(Waiting,UninitializedData)
+
   when(Waiting) {
     case Event(d: BuildFromDescriptions, UninitializedData) =>
       val auctions = d.descriptions.map(desc =>context.actorOf(Props(new Auction(desc)))).toList
