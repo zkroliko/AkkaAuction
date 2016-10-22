@@ -3,7 +3,7 @@ package auctionHouse
 import akka.actor.{Actor, ActorRef}
 import akka.event.LoggingReceive
 import auctionHouse.BidderInterest.{CanBid, CantBid, Overbid, ShouldIBid}
-import auctionHouse.AuctionHouse.ReadableActorRef
+import tools.ActorTools.ReadableActorRef
 
 import scala.util.Random
 
@@ -42,7 +42,7 @@ class BidderInterest(parent_ : ActorRef, val myAuction: ActorRef) extends Actor 
   private def bid(bidAmount: BigDecimal): Unit = {
     myBid = bidAmount
     myAuction ! Bid(myBid)
-    println(s"Bidder ${parent.id} decided to bid on auction ${myAuction.id} for '$bidAmount'")
+    println(f"Bidder ${parent.name} decided to bid on auction ${myAuction.name} for '$bidAmount%1.2f'")
     context.become(waitingForBidResult)
   }
 
@@ -80,12 +80,12 @@ class BidderInterest(parent_ : ActorRef, val myAuction: ActorRef) extends Actor 
 
   def winning = LoggingReceive {
     case info @ Info(price, leader) if sender == myAuction && leader.getOrElse(None) != self =>
-//      println(s"Bidder ${parent.id} overbid at ${sender.id} for $price by ${leader.get.id} ")
+//      println(s"Bidder ${parent.name} overbid at ${sender.name} for $price by ${leader.get.name} ")
       parent ! Overbid(myBid)
       processInfo(info)
       context.become(engaged)
     case w@Won(finalPrice) if sender == myAuction =>
-      println(s"Bidder ${parent.id} WON ${sender.id} for '$finalPrice'")
+      println(f"Bidder ${parent.name} WON ${sender.name} for '$finalPrice%1.2f'")
       parent ! w
       context.become(finished)
     case l@Lost() =>

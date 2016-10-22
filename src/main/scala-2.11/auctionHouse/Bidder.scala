@@ -7,7 +7,8 @@ import auctionHouse.AuctionSearch.{SearchResult, Find}
 
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
-import auctionHouse.AuctionHouse.{AuctionList, LookAtDescriptions, ReadableActorRef}
+import auctionHouse.AuctionHouse.{AuctionList, LookAtDescriptions}
+import tools.ActorTools.ReadableActorRef
 
 object Bidder {
 
@@ -78,7 +79,7 @@ class Bidder extends Actor with akka.actor.ActorLogging{
   }
 
   private def spawnInterests(auctions: List[ActorRef]) = {
-    println(s"Bidder ${self.id} looking at ${auctions.length} auctions")
+    println(s"Bidder ${self.name} looking at ${auctions.length} auctions")
     val additions = auctions.map(a => spawnInterest(a))
     interests ++= additions
   }

@@ -2,19 +2,12 @@ package auctionHouse
 
 import akka.actor.{Actor, ActorRef, Props}
 import akka.event.LoggingReceive
-import auctionHouse.Auction.{Bid, Start}
 import auctionHouse.Seller.BuildFromDescriptions
 
 object AuctionHouse {
   case object Init
   case class AuctionList(auctions: List[ActorRef])
   case class LookAtDescriptions(descriptions: List[AuctionDescription])
-
-  implicit class ReadableActorRef(ref: AnyRef) {
-    def id: String = {
-      s"-${Integer.toHexString(ref.hashCode).toUpperCase}-"
-    }
-  }
 }
 
 class AuctionHouse extends Actor {

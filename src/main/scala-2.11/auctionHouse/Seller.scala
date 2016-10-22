@@ -1,8 +1,8 @@
 package auctionHouse
 
-import akka.actor.FSM.Transition
-import akka.actor.{Props, ActorRef, FSM}
+import akka.actor.{ActorRef, FSM, Props}
 import auctionHouse.Auction.Start
+import tools.ActorTools.ReadableActorRef
 import auctionHouse.Seller._
 
 object Seller {
@@ -29,9 +29,11 @@ class Seller extends FSM[State,Data]{
   }
 
   when (AfterPostingAuctions){
-    case Event(k: Auction.KnowThatSold, a : AuctionListData) => println(s"$self knows that $sender has been sold ")
+    case Event(k: Auction.KnowThatSold, a : AuctionListData) =>
+      println(s"${self.name} knows that ${sender.name} has been sold ")
       stay()
-    case Event(Auction.KnowThatNotSold, a : AuctionListData) => println(s"$self knows that $sender has NOT been sold ")
+    case Event(Auction.KnowThatNotSold, a : AuctionListData) =>
+      println(s"${self.name} knows that his ${sender.name} has NOT been sold ")
       stay()
   }
   onTransition {
