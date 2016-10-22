@@ -29,13 +29,14 @@ class Seller extends FSM[State,Data]{
   }
 
   when (AfterPostingAuctions){
-    case Event(Auction.Sold,a : AuctionListData) =>
+    case Event(k: Auction.KnowThatSold, a : AuctionListData) => println(s"$self knows that $sender has been sold ")
+      stay()
+    case Event(Auction.KnowThatNotSold, a : AuctionListData) => println(s"$self knows that $sender has NOT been sold ")
       stay()
   }
   onTransition {
     case Waiting -> AfterPostingAuctions => nextStateData.asInstanceOf[AuctionListData].auctions.foreach {
       auction => auction ! Start
-      println(auction.path)
     }
   }
 

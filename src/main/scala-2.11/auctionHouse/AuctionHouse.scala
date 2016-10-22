@@ -8,6 +8,7 @@ import auctionHouse.Seller.BuildFromDescriptions
 object AuctionHouse {
   case object Init
   case class AuctionList(auctions: List[ActorRef])
+  case class LookAtDescriptions(descriptions: List[AuctionDescription])
 
   implicit class ReadableActorRef(ref: AnyRef) {
     def id: String = {
@@ -20,20 +21,17 @@ class AuctionHouse extends Actor {
   import AuctionHouse._
 
   val nSellers = 1
-  val nAuctionsPerSeller = 5
-  val nBidders = 2
+  val nAuctionsPerSeller = 10
+  val nBidders = 1
 
   def receive = LoggingReceive {
     case Init =>
       val sellers = (1 to nSellers).map{n => context.actorOf(Props[Seller],"seller1")}
       val descriptions = (1 to nAuctionsPerSeller).map(n => AuctionDescription("item"+n.toString,200.0+n))
       sellers.foreach{s => s ! BuildFromDescriptions(descriptions.toList)}
-      val bidders = (1 to nBidders).map(n => context.actorOf(Props[Bidder])).toList
+      val bidders = (1 to nBidders).map(n => context.actorOf(Props[Bidder],s"bidder$n")).toList
 
-      descriptions.foreach { d =>
-        val sel = context.actorSelection("akka://auctionHouse/user/auctionHouse/*/"+d.title)
-        println(sel)
-      }
+      bidders.foreach { b => b  ! LookAtDescriptions(descriptions.toList) }
 
   }
 }

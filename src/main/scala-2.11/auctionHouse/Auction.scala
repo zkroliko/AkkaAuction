@@ -15,7 +15,7 @@ import scala.concurrent.duration.Duration
 object Auction {
 
   val bidWaitDuration = Duration.create(5,TimeUnit.SECONDS)
-  val ignoredDuration = Duration.create(15,TimeUnit.SECONDS)
+  val ignoredDuration = Duration.create(10,TimeUnit.SECONDS)
 
   case object Start
   case object AskingForInfo
@@ -32,6 +32,9 @@ object Auction {
   trait ParticipationResult
   case class Won(price : BigDecimal) extends ParticipationResult
   case class Lost() extends ParticipationResult
+
+  case class KnowThatSold(price : BigDecimal, winner: ActorRef)
+  case object KnowThatNotSold
 
   // For timer
   case class BidTimerExpired(time : DateTime)
@@ -164,6 +167,7 @@ class Auction(description: AuctionDescription) extends FSM[State, Data] {
       goto(Created) using WaitingData(seller, price,interested,endTime)
     case Event(DeleteTimerExpired,IgnoredData(seller, price,interested)) =>
       println(s"Delete timer expired for ${self.id} at ${DateTime.now()}, auction deleted")
+      seller ! KnowThatNotSold
       stay()
     case Event(_,Uninitialized(price,interested)) =>
       sender ! Info(price,None)
@@ -174,6 +178,12 @@ class Auction(description: AuctionDescription) extends FSM[State, Data] {
     case Event(_,SoldData(seller,price,winner)) =>
       sender ! Info(price,Some(winner))
       stay()
+  }
+
+  onTransition {
+    case Activated -> Sold =>
+      val data = nextStateData.asInstanceOf[SoldData]
+      data.seller ! KnowThatSold(data.endPrice,data.winner)
   }
 
   initialize()

@@ -3,10 +3,11 @@ package auctionHouse
 import akka.actor.{Actor, ActorRef, Props}
 import akka.event.LoggingReceive
 import auctionHouse.Auction.{Lost, Won}
+import auctionHouse.AuctionSearch.{SearchResult, Find}
 
 import scala.collection.mutable.ListBuffer
 import scala.util.Random
-import auctionHouse.AuctionHouse.ReadableActorRef
+import auctionHouse.AuctionHouse.{AuctionList, LookAtDescriptions, ReadableActorRef}
 
 object Bidder {
 
@@ -22,6 +23,8 @@ class Bidder extends Actor with akka.actor.ActorLogging{
 
   import BidderInterest._
   import Bidder._
+  import AuctionHouse._
+  import AuctionSearch._
 
   def randomBidRatio = bidRatioMin+Random.nextDouble*(bidRatioMax-bidRatioMin)
 
@@ -63,9 +66,20 @@ class Bidder extends Actor with akka.actor.ActorLogging{
     budgetLeft += returned
   }
 
+  private def lookAtDescriptions(desc: List[AuctionDescription]) = {
+    desc.foreach { d =>
+      val searcher = context.actorOf(Props[AuctionSearch],s"searcher-${d.title}")
+      searcher ! Find(d.title)
+    }
+  }
+
+  private def spawnInterest(auction: ActorRef): ActorRef = {
+    context.actorOf(Props(new BidderInterest(self,auction)))
+  }
+
   private def spawnInterests(auctions: List[ActorRef]) = {
     println(s"Bidder ${self.id} looking at ${auctions.length} auctions")
-    val additions = auctions.map(a => context.actorOf(Props(new BidderInterest(self,a))))
+    val additions = auctions.map(a => spawnInterest(a))
     interests ++= additions
   }
 
@@ -78,7 +92,8 @@ class Bidder extends Actor with akka.actor.ActorLogging{
   }
 
   def receive = LoggingReceive {
-    case AuctionHouse.AuctionList(positions) => spawnInterests(positions)
+    case LookAtDescriptions(desc) => lookAtDescriptions(desc)
+    case SearchResult(keyword,auction) => spawnInterest(auction)
     case ShouldIBid(price,profitableTo) => considerBidding(sender, price)(implicitly(profitableTo))
     case Overbid(returned) => acknowledgeOverbid(returned)
     case Won(price) => acknowledgeWinning(sender)
