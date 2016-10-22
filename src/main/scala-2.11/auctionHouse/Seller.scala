@@ -1,6 +1,8 @@
 package auctionHouse
 
+import akka.actor.FSM.Transition
 import akka.actor.{Props, ActorRef, FSM}
+import auctionHouse.Auction.Start
 import auctionHouse.Seller._
 
 object Seller {
@@ -22,13 +24,19 @@ class Seller extends FSM[State,Data]{
 
   when(Waiting) {
     case Event(d: BuildFromDescriptions, UninitializedData) =>
-      val auctions = d.descriptions.map(desc =>context.actorOf(Props(new Auction(desc)))).toList
+      val auctions = d.descriptions.map(desc =>context.actorOf(Props(new Auction(desc)),desc.title)).toList
       goto(AfterPostingAuctions) using AuctionListData(auctions)
   }
 
   when (AfterPostingAuctions){
     case Event(Auction.Sold,a : AuctionListData) =>
       stay()
+  }
+  onTransition {
+    case Waiting -> AfterPostingAuctions => nextStateData.asInstanceOf[AuctionListData].auctions.foreach {
+      auction => auction ! Start
+      println(auction.path)
+    }
   }
 
 }
