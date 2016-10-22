@@ -1,11 +1,12 @@
 package auctionHouse
 
-import akka.actor.FSM
+import akka.actor.{ActorRef, FSM}
 import auctionHouse.AuctionSearch.{Initialized, Ready, Data, State}
 
 object AuctionSearch {
 
   final case class Find(keyword: String)
+  final case class SearchResult(keyword: String, results: List[ActorRef])
 
   sealed trait State
   case object Ready extends State

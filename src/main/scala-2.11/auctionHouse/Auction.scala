@@ -125,7 +125,7 @@ class Auction(description: AuctionDescription) extends FSM[State, Data] {
       if (time == data.endTime) {
         println(s"Timer expired for ${self.id} at ${data.endTime}, item ignored")
         startDeleteTimer()
-        goto(Ignored)
+        goto(Ignored) using IgnoredData(data.seller,data.startingPrice,data.interested)
       } else {
         stay()
       }
