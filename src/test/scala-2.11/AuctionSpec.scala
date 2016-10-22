@@ -110,6 +110,7 @@ class AuctionSpec extends TestKit(ActorSystem("AuctionSpec")) with WordSpecLike 
         val probe = TestProbe("interested")
         val auction = TestActorRef(Props(new Auction(desc)))
         auction ! Start
+        auction ! Bid(1005.0)
         probe.send(auction,Bid(2000.0))
         probe.expectMsgPF(500 millis) {
           case i : BidAck =>
@@ -121,11 +122,12 @@ class AuctionSpec extends TestKit(ActorSystem("AuctionSpec")) with WordSpecLike 
         val probe = TestProbe("interested")
         val auction = TestActorRef(Props(new Auction(desc)))
         auction ! Start
+        auction ! Bid(1005.0)
         probe.send(auction,Bid(1.0))
         probe.expectMsgPF(500 millis) {
           case i : BidNAck =>
             assert(auction.underlyingActor.asInstanceOf[Auction].stateData.
-              asInstanceOf[WaitingData].startingPrice.doubleValue == 1000.0)
+              asInstanceOf[BiddingData].price.doubleValue == 1005.0)
         }
       }
       "without a bid transition to be sold after some time" in {
@@ -141,14 +143,6 @@ class AuctionSpec extends TestKit(ActorSystem("AuctionSpec")) with WordSpecLike 
         }
       }
     }
-    "being in ingored state" must {
-
-    }
-    "being in sold state" must {
-
-    }
-
-
   }
 
 }
