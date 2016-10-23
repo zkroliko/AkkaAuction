@@ -30,12 +30,13 @@ class AuctionSearchSpec extends TestKit(ActorSystem("auctionHouse")) with WordSp
       }
       "respond if there is an auction found" in {
         val name = "Bulbulator9000X"
+        val namePart = "ulbu"
         val s = probe.childActorOf(Props[Seller],"seller1")
         println(s.path)
         probe.send(s,BuildFromDescriptions(List(AuctionDescription(name,4815162342.0))))
-        probe.send(search,Find(name))
+        probe.send(search,Find(namePart))
         probe.expectMsgPF(2000 millis) {
-          case SearchResult(foundK,foundA) if foundK == name =>
+          case SearchResult(foundK,foundA) if foundK == namePart =>
         }
       }
     }
