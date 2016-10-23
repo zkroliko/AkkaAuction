@@ -28,7 +28,7 @@ class AuctionSearch extends FSM[State,Data]{
   when(Ready) {
     case Event(Find(keyword),Initialized) =>
       val s = sender // Some kind of shadowing later
-      val path = "akka://auctionHouse/user/auctionHouse/*/"+keyword
+      val path = "akka://auctionHouse/*/*/*/"+keyword
       for (res <- context.actorSelection(path).resolveOne()) {
         s ! SearchResult(keyword, res)
       }
