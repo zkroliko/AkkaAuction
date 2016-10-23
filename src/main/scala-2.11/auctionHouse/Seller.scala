@@ -29,10 +29,10 @@ class Seller extends FSM[State,Data]{
   }
 
   when (AfterPostingAuctions){
-    case Event(k: Auction.KnowThatSold, a : AuctionListData) if a.auctions.contains(sender) =>
+    case Event(k: Auction.KnowThatSold, a : AuctionListData) =>
       println(s"${self.name} knows that ${sender.name} has been sold ")
       stay()
-    case Event(Auction.KnowThatNotSold, a : AuctionListData) if a.auctions.contains(sender) =>
+    case Event(Auction.KnowThatNotSold, a : AuctionListData) =>
       println(s"${self.name} knows that his ${sender.name} has NOT been sold ")
       stay()
   }
