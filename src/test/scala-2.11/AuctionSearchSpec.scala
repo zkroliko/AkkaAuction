@@ -15,17 +15,30 @@ class AuctionSearchSpec extends TestKit(ActorSystem("auctionHouse")) with WordSp
     AuctionDescription("toothbrush", 10.0)
   )
 
+  implicit class HasDataAccessible(as :AuctionSearch) {
+    def data = {
+      as.stateData.asInstanceOf[Initialized]
+    }
+  }
+
   override def afterAll(): Unit = {
     system.terminate
   }
 
   "An auction search" when {
-    val search = TestActorRef[AuctionSearch]
-    val probe = TestProbe("auctionHouse")
     "created" must {
+      val search = TestActorRef[AuctionSearch]
+      val probe = TestProbe("auctionHouse")
       "be in Ready state" in {
         assert(search.underlyingActor.stateName == Ready)
       }
+    }
+    val search = TestActorRef[AuctionSearch]
+    val probe = TestProbe("auction")
+    "enable registering" in {
+      probe.send(search,Register("foo"))
+      assert(search.underlyingActor.data.nameToAuction("foo") == probe.ref)
+      assert(search.underlyingActor.data.nameToAuction.size == 1)
     }
     "receiving Find message" must {
       "not respond when there is nothing found" in {
@@ -33,16 +46,13 @@ class AuctionSearchSpec extends TestKit(ActorSystem("auctionHouse")) with WordSp
         probe.expectNoMsg()
       }
       "respond if there is an auction found" in {
-        val name = "Bulbulator9000X"
-        val namePart = "ulbu"
-        val s = probe.childActorOf(Props[Seller],"seller1")
-        println(s.path)
-        probe.send(s,BuildFromDescriptions(List(AuctionDescription(name,4815162342.0))))
-        probe.send(search,Find(namePart))
-        probe.expectMsgPF(2000 millis) {
-          case SearchResult(foundK,foundA) if foundK == namePart =>
-        }
+        val probe = TestProbe("auction")
       }
+    }
+    "enable unregistering" in {
+      probe.send(search,Unregister("foo"))
+      assert(!search.underlyingActor.data.nameToAuction.contains("foo"))
+      assert(search.underlyingActor.data.nameToAuction.isEmpty)
     }
   }
 

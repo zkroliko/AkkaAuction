@@ -5,16 +5,20 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor._
 import auctionHouse.Auction._
-import tools.ActorTools.ReadableActorRef
+import auctionHouse.AuctionSearch.{Unregister, Register}
 import com.github.nscala_time.time.Imports._
 import sun.plugin.dom.exception.InvalidStateException
+import tools.ActorTools.ReadableActorRef
 import tools.TimeTools
 
 import scala.collection.immutable.SortedSet
+import scala.concurrent.Await
 import scala.concurrent.duration.Duration
+import scala.concurrent.duration._
 
 object Auction {
 
+  val registerTimeout = Duration.create(1,TimeUnit.SECONDS)
   val bidWaitDuration = Duration.create(5,TimeUnit.SECONDS)
   val ignoredDuration = Duration.create(10,TimeUnit.SECONDS)
 
@@ -67,6 +71,16 @@ class Auction(description: AuctionDescription) extends FSM[State, Data] {
   val system = context.system
   import system.dispatcher
 
+  val search = Await.result(context.actorSelection(AuctionSearch.path).resolveOne(registerTimeout), registerTimeout)
+
+  private def register() = {
+    search ! Register(title)
+  }
+
+  private def unregister() = {
+    search ! Unregister(title)
+  }
+
   private def informInterested(interested: SortedSet[ActorRef], price: BigDecimal, winning: Option[ActorRef]): Unit = {
     interested.foreach(_ ! Info(price,winning))
   }
@@ -100,6 +114,7 @@ class Auction(description: AuctionDescription) extends FSM[State, Data] {
 
   }
 
+  register()
   startWith(Idle,Uninitialized(startingPrice,SortedSet()))
 
   when(Idle) {
@@ -169,6 +184,7 @@ class Auction(description: AuctionDescription) extends FSM[State, Data] {
     case Event(DeleteTimerExpired,IgnoredData(seller, price,interested)) =>
       println(s"Delete timer expired for ${self.name} at ${TimeTools.timeNow}, auction deleted")
       seller ! KnowThatNotSold
+      unregister()
       stop(FSM.Normal)
     case Event(_,Uninitialized(price,interested)) =>
       sender ! Info(price,None)
@@ -185,6 +201,7 @@ class Auction(description: AuctionDescription) extends FSM[State, Data] {
     case Activated -> Sold =>
       val data = nextStateData.asInstanceOf[SoldData]
       data.seller ! KnowThatSold(data.endPrice,data.winner)
+      unregister()
   }
 
   initialize()
