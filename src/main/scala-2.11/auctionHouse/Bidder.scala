@@ -78,12 +78,6 @@ class Bidder extends Actor with akka.actor.ActorLogging{
     context.actorOf(Props(new BidderInterest(self,auction)))
   }
 
-  private def spawnInterests(auctions: List[ActorRef]) = {
-    println(s"Bidder ${self.name} looking at ${auctions.length} auctions")
-    val additions = auctions.map(a => spawnInterest(a))
-    interests ++= additions
-  }
-
   private def acknowledgeWinning(interest: ActorRef): Unit = {
     interests -= interest
   }
