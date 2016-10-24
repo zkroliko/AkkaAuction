@@ -1,16 +1,20 @@
 package auctionHouse
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor.{Actor, ActorRef, Props}
 import akka.event.LoggingReceive
 import auctionHouse.Auction.{Lost, Won}
-import auctionHouse.AuctionSearch.{SearchResult, Find}
 
 import scala.collection.mutable.ListBuffer
-import scala.util.Random
-import auctionHouse.AuctionHouse.{AuctionList, LookAtDescriptions}
-import tools.ActorTools.ReadableActorRef
+import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.Duration
+import scala.util.{Failure, Random, Success}
+import ExecutionContext.Implicits.global
 
 object Bidder {
+
+  val searchTimeout = Duration.create(1,TimeUnit.SECONDS)
 
   val maxBidRatio = 2.0
   val maxBidRatioVar = 2.0
@@ -22,10 +26,10 @@ object Bidder {
 
 class Bidder extends Actor with akka.actor.ActorLogging{
 
-  import BidderInterest._
-  import Bidder._
   import AuctionHouse._
   import AuctionSearch._
+  import Bidder._
+  import BidderInterest._
 
   def randomBidRatio = bidRatioMin+Random.nextDouble*(bidRatioMax-bidRatioMin)
 
@@ -68,9 +72,11 @@ class Bidder extends Actor with akka.actor.ActorLogging{
   }
 
   private def lookAtDescriptions(desc: List[AuctionDescription]) = {
-    desc.foreach { d =>
-      val searcher = context.actorOf(Props[AuctionSearch],s"searcher-${d.title}")
-      searcher ! Find(d.title)
+    context.actorSelection(AuctionSearch.path).resolveOne(searchTimeout).onComplete {
+      case Success(searcher) => desc.foreach { d =>
+        searcher ! Find(d.title)
+      }
+      case Failure(ex: Throwable) => println("Searcher not found")
     }
   }
 

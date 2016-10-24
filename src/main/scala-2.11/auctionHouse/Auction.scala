@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor._
 import auctionHouse.Auction._
-import auctionHouse.AuctionSearch.{Unregister, Register}
+import auctionHouse.AuctionSearch.{RegistrationMessage, Unregister, Register}
 import com.github.nscala_time.time.Imports._
 import sun.plugin.dom.exception.InvalidStateException
 import tools.ActorTools.ReadableActorRef
@@ -15,6 +15,7 @@ import scala.collection.immutable.SortedSet
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 import scala.concurrent.duration._
+import scala.util.{Failure, Success}
 
 object Auction {
 
@@ -71,14 +72,21 @@ class Auction(description: AuctionDescription) extends FSM[State, Data] {
   val system = context.system
   import system.dispatcher
 
-  val search = Await.result(context.actorSelection(AuctionSearch.path).resolveOne(registerTimeout), registerTimeout)
+  private def messageToRegistration(msg: RegistrationMessage) {
+    context.actorSelection(AuctionSearch.path).resolveOne(registerTimeout).onComplete {
+      case Success(searcher) => searcher ! msg
+      case Failure(ex) => println("Searcher not found")
+    }
+  }
 
   private def register() = {
-    search ! Register(title)
+      messageToRegistration(Register(title))
+
   }
 
   private def unregister() = {
-    search ! Unregister(title)
+    messageToRegistration(Unregister(title))
+
   }
 
   private def informInterested(interested: SortedSet[ActorRef], price: BigDecimal, winning: Option[ActorRef]): Unit = {

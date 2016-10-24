@@ -34,23 +34,27 @@ class AuctionSearchSpec extends TestKit(ActorSystem("auctionHouse")) with WordSp
       }
     }
     val search = TestActorRef[AuctionSearch]
-    val probe = TestProbe("auction")
+    val auctionProbe = TestProbe("auction")
     "enable registering" in {
-      probe.send(search,Register("foo"))
-      assert(search.underlyingActor.data.nameToAuction("foo") == probe.ref)
+      auctionProbe.send(search,Register("foo"))
+      assert(search.underlyingActor.data.nameToAuction("foo") == auctionProbe.ref)
       assert(search.underlyingActor.data.nameToAuction.size == 1)
     }
     "receiving Find message" must {
       "not respond when there is nothing found" in {
-        probe.send(search,Find("SomeVery starenge sadsd2322 stuff"))
-        probe.expectNoMsg()
+        auctionProbe.send(search,Find("SomeVery starenge sadsd2322 stuff"))
+        auctionProbe.expectNoMsg()
       }
       "respond if there is an auction found" in {
-        val probe = TestProbe("auction")
+        val bidder = TestProbe("bidder")
+        bidder.send(search,Find("foo"))
+        bidder.expectMsgPF(500 millis) {
+          case SearchResult("foo",res) if res == auctionProbe.ref =>
+        }
       }
     }
     "enable unregistering" in {
-      probe.send(search,Unregister("foo"))
+      auctionProbe.send(search,Unregister("foo"))
       assert(!search.underlyingActor.data.nameToAuction.contains("foo"))
       assert(search.underlyingActor.data.nameToAuction.isEmpty)
     }

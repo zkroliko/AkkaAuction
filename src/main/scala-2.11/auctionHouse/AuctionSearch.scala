@@ -2,18 +2,18 @@ package auctionHouse
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.Actor.Receive
-import akka.actor.{Actor, ActorRef, FSM}
-import akka.event.LoggingReceive
+import akka.actor.{ActorRef, FSM}
 import auctionHouse.AuctionSearch._
 
 import scala.collection.immutable.Map
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
 
 object AuctionSearch {
 
-  final case class Register(name: String)
-  final case class Unregister(name: String)
+  trait RegistrationMessage
+  final case class Register(name: String) extends RegistrationMessage
+  final case class Unregister(name: String) extends RegistrationMessage
+
   final case class Find(keyword: String)
   final case class SearchResult(keyword: String, result: ActorRef)
 
@@ -34,10 +34,8 @@ class AuctionSearch extends FSM[State,Data]{
 
   when(Ready) {
     case Event(Find(keyword),Initialized(map)) =>
-      val s = sender // Some kind of shadowing later
-      val path = s"akka://auctionHouse/*/*/seller*/*$keyword*"
-      for (res <- context.actorSelection(path).resolveOne()) {
-        s ! SearchResult(keyword, res)
+      map.keys.filter(_.contains(keyword)).foreach {
+        r => sender ! SearchResult(keyword,map(r))
       }
       stay()
     case Event(Register(name),Initialized(map)) =>
