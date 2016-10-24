@@ -15,6 +15,10 @@ class AuctionSearchSpec extends TestKit(ActorSystem("auctionHouse")) with WordSp
     AuctionDescription("toothbrush", 10.0)
   )
 
+  override def afterAll(): Unit = {
+    system.terminate
+  }
+
   "An auction search" when {
     val search = TestActorRef[AuctionSearch]
     val probe = TestProbe("auctionHouse")

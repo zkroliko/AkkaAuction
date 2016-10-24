@@ -13,6 +13,10 @@ class SellerSpec extends TestKit(ActorSystem("SellerSpec")) with WordSpecLike wi
     AuctionDescription("toothbrush", 10.0)
   )
 
+  override def afterAll(): Unit = {
+    system.terminate
+  }
+
   "An auction" when {
     "created" must {
       val seller = TestActorRef[Seller]

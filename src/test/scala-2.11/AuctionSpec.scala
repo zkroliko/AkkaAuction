@@ -10,6 +10,10 @@ class AuctionSpec extends TestKit(ActorSystem("AuctionSpec")) with WordSpecLike 
   val desc = AuctionDescription("car", 1000.0)
   import system.dispatcher
 
+  override def afterAll(): Unit = {
+    system.terminate
+  }
+
   "An auction" when {
     "created from description in Idle state" must {
       val auction = TestActorRef(Props(new Auction(desc)))

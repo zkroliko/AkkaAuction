@@ -22,6 +22,9 @@ class BidderInterestSpec extends TestKit(ActorSystem("SellerSpec")) with WordSpe
 
   def underlying = bidInt.underlyingActor.asInstanceOf[BidderInterest]
 
+  override def afterAll(): Unit = {
+    system.terminate
+  }
 
   "A bidder interest" when {
     "created" when {
