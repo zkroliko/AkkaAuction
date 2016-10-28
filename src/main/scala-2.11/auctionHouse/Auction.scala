@@ -76,11 +76,10 @@ object Auction {
 
   sealed trait DomainEvent
   case class BidderSubscribed(bidder: ActorRef) extends DomainEvent
-  case class BidReceived(price: BigDecimal, sender: ActorRef, time: DateTime) extends DomainEvent
   case class BidAccepted(price: BigDecimal, sender: ActorRef, time: DateTime) extends DomainEvent
-  case class BecameCreated(time: DateTime) extends DomainEvent
-  case class BecameIgnored(time: DateTime) extends DomainEvent
-  case class BecameSold() extends DomainEvent
+  case class BecameCreated(creator: ActorRef, time: DateTime) extends DomainEvent
+  case object BecameIgnored extends DomainEvent
+  case object BecameSold extends DomainEvent
 }
 
 class Auction(description: AuctionDescription) extends PersistentFSM[State, Data, DomainEvent] {
@@ -97,23 +96,41 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
 
   override def applyEvent(domainEvent: DomainEvent, currentData: Data): Data = {
     domainEvent match {
+      case BecameCreated(creator,time) =>
+        currentData match {
+          case Uninitialized(price,interested) => WaitingData(sender,price,interested,time)
+          case _ => throw AssertionError
+        }
       case BidderSubscribed(bidder) =>
         currentData match {
-          case d: Uninitialized => d.copy(interested = d.interested+bidder)
-          case d: WaitingData => d.copy(interested = d.interested+bidder)
-          case d: BiddingData => d.copy(interested = d.interested+bidder)
-          case d: IgnoredData => d.copy(interested = d.interested+bidder)
-          case d: SoldData => d.copy(interested = d.interested+bidder)
+          case d: Uninitialized => d.copy(interested = d.interested + bidder)
+          case d: WaitingData => d.copy(interested = d.interested + bidder)
+          case d: BiddingData => d.copy(interested = d.interested + bidder)
+          case d: IgnoredData => d.copy(interested = d.interested + bidder)
+          case d: SoldData => d.copy(interested = d.interested + bidder)
+        }
+      case BidAccepted(newValue, bidder, time) =>
+        currentData match {
+          case WaitingData(seller,price,interested,oldTime) =>
+            BiddingData(seller, newValue, interested + sender, time, bidder)
+          case BiddingData(seller,price,interested,oldTime,prevLeader) =>
+            BiddingData(seller, newValue, interested + sender, time, bidder)
+          case _ => throw AssertionError
+        }
+      case BecameIgnored =>
+        currentData match {
+          case WaitingData(seller,price,interested,endTime) => IgnoredData(seller,price,interested)
+          case _ => throw AssertionError
         }
     }
   }
 
     when(Idle) {
     case Event(Start, Uninitialized(price,interested)) =>
-      val endTime = restartedTimer()
+      val endTime = restartTimer()
       println(f"Auction ${self.name} for $price%1.2f created, and will end at ${TimeTools.timeFormatted(endTime)}")
       informInterested(interested,price,None)
-      goto(Created) using WaitingData(sender,price,interested,endTime)
+      goto(Created) applying BecameCreated(sender,endTime)
     case Event(AskingForInfo, u: Uninitialized) =>
       sender ! Info(u.startingPrice,None)
       stay() replying BidderSubscribed(sender)
@@ -127,15 +144,15 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
         case BidAck(value) =>
           println(s"Auction ${self.name} activated")
           informInterested(interested,currentPrice,Some(sender))
-          goto(Activated) using BiddingData(seller, proposed, interested + sender, restartedTimer(), sender)
+          goto(Activated) applying BidAccepted(value.proposed,sender,restartTimer())
         case BidNAck(value) =>
-          stay() applying BidderSubscribed(sender) using data.copy(interested = interested + sender)
+          stay() applying BidderSubscribed(sender)
       }
     case Event(BidTimerExpired(time), data : WaitingData) =>
       if (time == data.endTime) {
         println(s"Timer expired for ${self.name} at ${TimeTools.timeFormatted(data.endTime)}, item ignored")
         startDeleteTimer()
-        goto(Ignored) using IgnoredData(data.seller,data.startingPrice,data.interested)
+        goto(Ignored) applying BecameIgnored
       } else {
         stay()
       }
@@ -151,7 +168,7 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
       result match {
         case BidAck(value) =>
           informInterested(interested,currentPrice,Some(sender))
-          goto(Activated) using BiddingData(seller, proposed, interested + sender, endTime, sender)
+          goto(Activated) applying BidAccepted(value.proposed,sender,restartTimer())
         case BidNAck(value) =>
           stay() replying BidderSubscribed(sender)
       }
@@ -159,7 +176,7 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
       if (time == endTime) {
         informOfResult(interested,Some(winner),endPrice)
         println(f"Timer expired for ${self.name}, item sold for '$endPrice%1.2f' at ${TimeTools.timeNow}")
-        goto(Sold) using SoldData(seller, endPrice,winner,interested)
+        goto(Sold) applying BecameSold
       } else {
         stay()
       }
@@ -170,13 +187,13 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
 
   when(Ignored) {
     case Event(Start,IgnoredData(seller, price,interested)) =>
-      val endTime = restartedTimer()
-      goto(Created) using WaitingData(seller, price,interested,endTime)
+      val endTime = restartTimer()
+      goto(Created) applying BecameCreated(seller, endTime)
     case Event(DeleteTimerExpired,IgnoredData(seller, price,interested)) =>
       println(s"Delete timer expired for ${self.name} at ${TimeTools.timeNow}, auction deleted")
       seller ! KnowThatNotSold
       unregister()
-      stop(FSM.Normal)
+      stop(PersistentFSM.Normal)
     case Event(_,Uninitialized(price,interested)) =>
       sender ! Info(price,None)
       stay() replying BidderSubscribed(sender)
@@ -185,7 +202,7 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
   when(Sold) {
     case Event(_,SoldData(seller,price,winner,interested)) =>
       sender ! Info(price,Some(winner))
-      stop(FSM.Normal)
+      stop(PersistentFSM.Normal)
   }
 
   onTransition {
@@ -235,7 +252,7 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
     }
   }
 
-  private def restartedTimer(): DateTime = {
+  private def restartTimer(): DateTime = {
     val endTime = DateTime.now+ignoredDuration.toSeconds
     system.scheduler.scheduleOnce(bidWaitDuration,self,BidTimerExpired(endTime))
     endTime
