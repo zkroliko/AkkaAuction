@@ -74,7 +74,6 @@ class Bidder extends Actor with akka.actor.ActorLogging{
   private def lookAtDescriptions(desc: List[AuctionDescription]) = {
     context.actorSelection(AuctionSearch.path).resolveOne(searchTimeout).onComplete {
       case Success(searcher) => desc.foreach { d =>
-        println("Searching for"+d.title)
         searcher ! Find(d.title)
       }
       case Failure(ex: Throwable) => println("Searcher not found")

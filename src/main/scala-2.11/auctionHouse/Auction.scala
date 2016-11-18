@@ -67,6 +67,9 @@ object Auction {
   case object Sold extends State {
     override def identifier: String = "Sold"
   }
+  case object Deleted extends State {
+    override def identifier: String = "Deleted"
+  }
 
   sealed trait Data
   final case class Uninitialized(startingPrice: BigDecimal, interested: InterestedSet) extends Data
@@ -75,13 +78,14 @@ object Auction {
   final case class BiddingData(seller: ActorRef, price: BigDecimal, interested: InterestedSet, endTime: DateTime,
                                currentWinner: ActorRef) extends Data
   final case class IgnoredData(seller: ActorRef, price: BigDecimal, interested: InterestedSet) extends Data
-  final case class SoldData(seller: ActorRef, endPrice: BigDecimal, winner: ActorRef, interested: InterestedSet) extends Data
+  final case class SoldData(seller: ActorRef, endPrice: BigDecimal, winner: Option[ActorRef], interested: InterestedSet) extends Data
 
   sealed trait DomainEvent
   case class BidderSubscribed(bidder: ActorRef) extends DomainEvent
   case class BidAccepted(price: BigDecimal, sender: ActorRef, time: DateTime) extends DomainEvent
   case class BecameCreated(creator: ActorRef, time: DateTime) extends DomainEvent
   case object BecameIgnored extends DomainEvent
+  case object BecameDeleted extends DomainEvent
   case object BecameSold extends DomainEvent
 }
 
@@ -141,6 +145,24 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
           case WaitingData(seller,price,interested,endTime) =>
             startDeleteTimer()
             IgnoredData(seller,price,interested)
+          case _ => throw new AssertionError
+        }
+      case BecameSold =>
+        currentData match {
+          case BiddingData(seller,price,interested,oldTime,prevLeader) =>
+            seller ! KnowThatSold(price, prevLeader)
+            unregister()
+            SoldData(seller,price,Some(prevLeader),interested)
+//            stop(PersistentFSM.Normal)
+          case _ => throw new AssertionError
+        }
+      case BecameDeleted =>
+        currentData match {
+          case data @ IgnoredData(seller,price,interested) =>
+            seller ! KnowThatNotSold
+            unregister()
+            data
+//            stop(PersistentFSM.Normal)
           case _ => throw new AssertionError
         }
       case _ => throw new AssertionError
@@ -209,9 +231,7 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
       goto(Created) applying BecameCreated(seller, endTime)
     case Event(DeleteTimerExpired,IgnoredData(seller, price,interested)) =>
       println(s"Delete timer expired for ${self.name} at ${TimeTools.timeNow}, auction deleted")
-      seller ! KnowThatNotSold
-      unregister()
-      stop(PersistentFSM.Normal)
+      goto(Deleted) applying BecameDeleted
     case Event(_,Uninitialized(price,interested)) =>
       sender ! Info(price,None)
       stay() applying  BidderSubscribed(sender)
@@ -219,15 +239,8 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
 
   when(Sold) {
     case Event(_,SoldData(seller,price,winner,interested)) =>
-      sender ! Info(price,Some(winner))
-      stop(PersistentFSM.Normal)
-  }
-
-  onTransition {
-    case Activated -> Sold =>
-      val data = nextStateData.asInstanceOf[SoldData]
-      data.seller ! KnowThatSold(data.endPrice,data.winner)
-      unregister()
+      sender ! Info(price,winner)
+      stay()
   }
 
   private def messageToRegistration(msg: RegistrationMessage) {
@@ -238,7 +251,6 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
   }
 
   private def register() = {
-    println("registering")
     messageToRegistration(Register(title))
   }
 
