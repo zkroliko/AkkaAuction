@@ -94,7 +94,7 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
 
   override def domainEventClassTag: ClassTag[DomainEvent] = classTag[DomainEvent]
 
-  override def persistenceId: String = "persistent-auction-fsm"
+  override def persistenceId: String = "persistent-auction-fsm"+self.path
 
   val title : String = description.title
   val startingPrice: BigDecimal = description.price
