@@ -13,7 +13,7 @@ import tools.ActorTools.ReadableActorRef
 import tools.TimeTools
 
 import scala.collection.immutable.SortedSet
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration.{FiniteDuration, Duration}
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success}
 import akka.actor.actorRef2Scala
@@ -84,7 +84,7 @@ object Auction {
   case class BidderSubscribed(bidder: ActorRef) extends DomainEvent
   case class BidAccepted(price: BigDecimal, sender: ActorRef, time: DateTime) extends DomainEvent
   case class BecameCreated(creator: ActorRef, time: DateTime) extends DomainEvent
-  case object BecameIgnored extends DomainEvent
+  case class BecameIgnored(time: DateTime) extends DomainEvent
   case object BecameDeleted extends DomainEvent
   case object BecameSold extends DomainEvent
 }
@@ -111,13 +111,13 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
       case BecameCreated(creator,time) =>
         currentData match {
           case Uninitialized(price,interested) =>
-            restartTimer()
+            val endTime = setTimer(time)
             informInterested(interested,price,None)
-            WaitingData(sender,price,interested,time)
+            WaitingData(sender,price,interested,endTime)
           case IgnoredData(seller,price,interested) =>
-            restartTimer()
+            val endTime = setTimer(time)
             informInterested(interested,price,None)
-            WaitingData(sender,price,interested,time)
+            WaitingData(sender,price,interested,endTime)
           case _ => throw new AssertionError
         }
       case BidderSubscribed(bidder) =>
@@ -132,18 +132,18 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
         currentData match {
           case WaitingData(seller,price,interested,oldTime) =>
             informInterested(interested,price,Some(sender))
-            restartTimer()
-            BiddingData(seller, newValue, interested + bidder, time, bidder)
+            val endTime = setTimer(time)
+            BiddingData(seller, newValue, interested + bidder, endTime, bidder)
           case BiddingData(seller,price,interested,oldTime,prevLeader) =>
             informInterested(interested,price,Some(sender))
-            restartTimer()
-            BiddingData(seller, newValue, interested + bidder, time, bidder)
+            val endTime = setTimer(time)
+            BiddingData(seller, newValue, interested + bidder, endTime, bidder)
           case _ => throw new AssertionError
         }
-      case BecameIgnored =>
+      case BecameIgnored(time) =>
         currentData match {
           case WaitingData(seller,price,interested,endTime) =>
-            startDeleteTimer()
+            setDeleteTimer(DateTime.now)
             IgnoredData(seller,price,interested)
           case _ => throw new AssertionError
         }
@@ -186,14 +186,14 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
       result match {
         case BidAck(value) =>
           println(s"Auction ${self.name} activated")
-          goto(Activated) applying BidAccepted(value.proposed,sender,restartTimer())
+          goto(Activated) applying BidAccepted(value.proposed,sender,DateTime.now)
         case BidNAck(value) =>
           stay() applying BidderSubscribed(sender)
       }
     case Event(BidTimerExpired(time), data : WaitingData) =>
       if (time == data.endTime) {
         println(s"Timer expired for ${self.name} at ${TimeTools.timeFormatted(data.endTime)}, item ignored")
-        goto(Ignored) applying BecameIgnored
+        goto(Ignored) applying BecameIgnored(DateTime.now)
       } else {
         stay()
       }
@@ -208,7 +208,7 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
       sender ! result
       result match {
         case BidAck(value) =>
-          goto(Activated) applying BidAccepted(value.proposed,sender,restartTimer())
+          goto(Activated) applying BidAccepted(value.proposed,sender,DateTime.now)
         case BidNAck(value) =>
           stay() applying BidderSubscribed(sender)
       }
@@ -227,7 +227,7 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
 
   when(Ignored) {
     case Event(Start,IgnoredData(seller, price,interested)) =>
-      val endTime = restartTimer()
+      val endTime = setTimer(DateTime.now)
       goto(Created) applying BecameCreated(seller, endTime)
     case Event(DeleteTimerExpired,IgnoredData(seller, price,interested)) =>
       println(s"Delete timer expired for ${self.name} at ${TimeTools.timeNow}, auction deleted")
@@ -240,6 +240,12 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
   when(Sold) {
     case Event(_,SoldData(seller,price,winner,interested)) =>
       sender ! Info(price,winner)
+      stay()
+  }
+
+  when(Deleted) {
+    case Event(_,IgnoredData(seller,price,interested)) =>
+      sender ! Info(price,None)
       stay()
   }
 
@@ -280,13 +286,19 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
     }
   }
 
-  private def restartTimer(): DateTime = {
-    val endTime = DateTime.now+ignoredDuration.toSeconds
-    system.scheduler.scheduleOnce(bidWaitDuration,self,BidTimerExpired(endTime))
+  private def setTimer(startTime: DateTime): DateTime = {
+    val endTime: DateTime = startTime+bidWaitDuration.toSeconds
+    val diff = new Period(startTime,endTime)
+    val duration = FiniteDuration(diff.toDurationFrom(startTime).getMillis,TimeUnit.SECONDS)
+    system.scheduler.scheduleOnce(duration,self,BidTimerExpired(endTime))
     endTime
   }
 
-  private def startDeleteTimer() = {
-    system.scheduler.scheduleOnce(ignoredDuration,self,DeleteTimerExpired)
+  private def setDeleteTimer(startTime: DateTime): DateTime = {
+    val endTime: DateTime = startTime+ignoredDuration.toSeconds
+    val diff = new Period(startTime,endTime)
+    val duration = FiniteDuration(diff.toDurationFrom(startTime).getMillis,TimeUnit.SECONDS)
+    system.scheduler.scheduleOnce(duration,self,DeleteTimerExpired)
+    endTime
   }
 }
