@@ -47,7 +47,7 @@ class BidderInterest(parent_ : ActorRef, val myAuction: ActorRef) extends Actor 
   }
 
   def receive = LoggingReceive {
-    case info : Info if sender == myAuction =>
+    case info : Info if (sender == myAuction) && info.leader.isEmpty =>
       processInitialInfo(info)
       context.become(engaged)
     case l@Lost() => // already lost

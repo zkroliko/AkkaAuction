@@ -122,8 +122,8 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
         }
       case BidderSubscribed(bidder) =>
         currentData match {
-          case d: Uninitialized => d.copy(interested = d.interested + bidder)
-          case d: WaitingData => d.copy(interested = d.interested + bidder)
+          case d: Uninitialized  => d.copy(interested = d.interested + bidder)
+          case d: WaitingData =>  d.copy(interested = d.interested + bidder)
           case d: BiddingData => d.copy(interested = d.interested + bidder)
           case d: IgnoredData => d.copy(interested = d.interested + bidder)
           case d: SoldData => d.copy(interested = d.interested + bidder)
@@ -197,9 +197,9 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
       } else {
         stay()
       }
-    case Event(_, data : WaitingData) =>
+    case Event(_, data : WaitingData)  =>
       sender ! Info(data.startingPrice, None)
-      stay() applying  BidderSubscribed(sender)
+      stay() applying BidderSubscribed(sender)
   }
 
   when(Activated) {
@@ -222,7 +222,7 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
       }
     case Event(_, data : BiddingData) =>
       sender ! Info(data.price, Some(data.currentWinner))
-      stay() applying  BidderSubscribed(sender)
+      stay() applying BidderSubscribed(sender)
   }
 
   when(Ignored) {
@@ -234,7 +234,7 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
       goto(Deleted) applying BecameDeleted
     case Event(_,Uninitialized(price,interested)) =>
       sender ! Info(price,None)
-      stay() applying  BidderSubscribed(sender)
+      stay() applying BidderSubscribed(sender)
   }
 
   when(Sold) {
