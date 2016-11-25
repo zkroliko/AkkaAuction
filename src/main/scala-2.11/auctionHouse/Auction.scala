@@ -7,6 +7,7 @@ import akka.actor._
 import akka.persistence.fsm.PersistentFSM.FSMState
 import auctionHouse.Auction._
 import auctionHouse.AuctionSearch.{Register, RegistrationMessage, Unregister}
+import auctionHouse.Notifier.Notify
 import com.github.nscala_time.time.Imports._
 import sun.plugin.dom.exception.InvalidStateException
 import tools.ActorTools.ReadableActorRef
@@ -95,6 +96,9 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
   override def domainEventClassTag: ClassTag[DomainEvent] = classTag[DomainEvent]
 
   override def persistenceId: String = "persistent-auction-fsm"+self.path
+
+  // For Auction Publisher system
+  val notifier = context.actorOf(Props[Notifier])
 
   val title : String = description.title
   val startingPrice: BigDecimal = description.price
@@ -266,6 +270,8 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
 
   private def informInterested(interested: SortedSet[ActorRef], price: BigDecimal, winning: Option[ActorRef]): Unit = {
     interested.foreach(_ ! Info(price,winning))
+    // Auction publisher
+    notifier ! Notify(description.title,price,winning)
   }
 
   private def processedBid(bid: Bid, currentPrice: BigDecimal, sender: ActorRef): BidResult = {
