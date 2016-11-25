@@ -1,14 +1,12 @@
 package auctionHouse
 
-import akka.actor.SupervisorStrategy.{Restart, Escalate}
+import akka.actor.SupervisorStrategy.{Escalate, Restart}
 import akka.actor._
 import akka.event.LoggingReceive
 import akka.util.Timeout
 import auctionHouse.Notifier.{Notification, NotificationContent}
-import scala.concurrent.ExecutionContext
+
 import scala.concurrent.duration._
-import scala.util.{Failure, Success}
-import ExecutionContext.Implicits.global
 
 object Notifier {
   case class Notification(target: ActorSelection, content: NotificationContent)
@@ -32,8 +30,8 @@ class Notifier extends Actor with ActorLogging{
   }
 
   override val supervisorStrategy: SupervisorStrategy = OneForOneStrategy(maxNrOfRetries = 100, loggingEnabled = false) {
-    case _: ActorNotFound =>
-      println("Publishing message failed, retrying")
+    case ex: ActorNotFound =>
+      println("Publishing message failed, retrying:" + ex.getMessage)
       Restart
 
     case _ => Escalate
