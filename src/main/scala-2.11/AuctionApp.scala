@@ -6,15 +6,16 @@ object AuctionApp extends App{
 
   val config = ConfigFactory.load()
 
-  val publisher = ActorSystem("auctionPublisher", config.getConfig("auctionPublisher").withFallback(config))
-  val auctionPublisher = publisher.actorOf(Props[AuctionPublisher],"auctionPublisher")
-
-  println(config.getConfig("auctionPublisher"))
-
-  auctionPublisher ! AuctionPublisher.Init
+//  val publisher = ActorSystem("auctionPublisher", config.getConfig("auctionPublisher").withFallback(config))
+//  val auctionPublisher = publisher.actorOf(Props[AuctionPublisher],"auctionPublisher")
+//
+//  auctionPublisher ! AuctionPublisher.Init
 
   val auction = ActorSystem("auctionHouse", config.getConfig("auctionHouse").withFallback(config))
   val auctionHouse = auction.actorOf(Props[AuctionHouse],"auctionHouse")
+  val auctionPublisher = auction.actorOf(Props[AuctionPublisher],"auctionPublisher")
+
+  auctionPublisher ! AuctionPublisher.Init
 
   auctionHouse ! AuctionHouse.Init
 }
