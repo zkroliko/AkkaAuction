@@ -1,12 +1,11 @@
-package auctionHouse
+package auctionHouse.search
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{ActorRef, FSM}
-import auctionHouse.AuctionSearch._
+import akka.actor.{Actor, ActorRef}
+import akka.event.LoggingReceive
 
 import scala.collection.immutable.Map
-import scala.concurrent.duration.Duration
 
 object AuctionSearch {
 
@@ -26,21 +25,24 @@ object AuctionSearch {
   val path = "akka://auctionHouse/*/*/auctionSearch"
 }
 
-class AuctionSearch extends FSM[State,Data]{
+class AuctionSearch extends Actor{
+  import AuctionSearch._
 
-  startWith(Ready,Initialized(Map()))
+  var nameToAuction: Map[String,ActorRef] = scala.collection.immutable.Map[String,ActorRef]()
 
   implicit val timeout = akka.util.Timeout(1L, TimeUnit.SECONDS)
 
-  when(Ready) {
-    case Event(Find(keyword),Initialized(map)) =>
-      map.keys.filter(_.contains(keyword)).foreach {
-        r => sender ! SearchResult(keyword,map(r))
+  def receive = LoggingReceive {
+    case Find(keyword) =>
+      println("d")
+      nameToAuction.keys.filter(_.contains(keyword)).foreach {
+        r => sender ! SearchResult(keyword,nameToAuction(r))
+        println("d2")
       }
-      stay()
-    case Event(Register(name),Initialized(map)) =>
-      stay() using Initialized(map+(name->sender))
-    case Event(Unregister(name),Initialized(map)) =>
-      stay() using Initialized(map - name)
+    case Register(name) =>
+      println("reg:::"+sender)
+      nameToAuction += (name->sender)
+    case Unregister(name) =>
+      nameToAuction -= name
   }
 }

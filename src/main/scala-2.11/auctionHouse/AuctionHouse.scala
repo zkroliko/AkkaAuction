@@ -2,7 +2,9 @@ package auctionHouse
 
 import akka.actor.{Actor, ActorRef, Props}
 import akka.event.LoggingReceive
+import akka.routing.RoundRobinRoutingLogic
 import auctionHouse.Seller.BuildFromDescriptions
+import auctionHouse.search.{MasterSearch, AuctionSearch, AuctionSearch$}
 
 object AuctionHouse {
   case object Init
@@ -19,7 +21,7 @@ class AuctionHouse extends Actor {
 
   def receive = LoggingReceive {
     case Init =>
-      val registation = context.actorOf(Props[AuctionSearch],"auctionSearch")
+      val registration = context.actorOf(MasterSearch.props(1,RoundRobinRoutingLogic()),"auctionSearch")
       val sellers = (1 to nSellers).map{n => context.actorOf(Props[Seller],"seller"+n)}
       val descriptions = (1 to nAuctionsPerSeller).map(n => AuctionDescription("item"+n.toString,200.0+n))
       sellers.foreach{s => s ! BuildFromDescriptions(descriptions.toList)}

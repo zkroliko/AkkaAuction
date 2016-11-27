@@ -1,9 +1,10 @@
 import akka.actor.ActorSystem
 import akka.testkit.{TestActorRef, TestKit, TestProbe}
-import auctionHouse.Auction.{Lost, Won, AskingForInfo}
+import auctionHouse.Auction.{AskingForInfo, Lost, Won}
 import auctionHouse.AuctionHouse.LookAtDescriptions
-import auctionHouse.AuctionSearch.SearchResult
-import auctionHouse.BidderInterest.{Overbid, CantBid, CanBid, ShouldIBid}
+import auctionHouse.BidderInterest.{CanBid, CantBid, Overbid, ShouldIBid}
+import auctionHouse.search.AuctionSearch
+import auctionHouse.search.AuctionSearch.SearchResult
 import auctionHouse.{AuctionDescription, Bidder}
 import org.scalatest.{BeforeAndAfterAll, WordSpecLike}
 

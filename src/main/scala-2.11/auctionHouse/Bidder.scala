@@ -5,6 +5,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.{Actor, ActorRef, Props}
 import akka.event.LoggingReceive
 import auctionHouse.Auction.{Lost, Won}
+import auctionHouse.search.{AuctionSearch, AuctionSearch$}
 
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.ExecutionContext
@@ -94,7 +95,9 @@ class Bidder extends Actor with akka.actor.ActorLogging{
 
   def receive = LoggingReceive {
     case LookAtDescriptions(desc) => lookAtDescriptions(desc)
-    case SearchResult(keyword,auction) => spawnInterest(auction)
+    case SearchResult(keyword,auction) =>
+      println (keyword+":::"+auction)
+      spawnInterest(auction)
     case ShouldIBid(price,profitableTo) => considerBidding(sender, price)(implicitly(profitableTo))
     case Overbid(returned) => acknowledgeOverbid(returned)
     case Won(price) => acknowledgeWinning(sender)

@@ -5,16 +5,15 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor._
 import auctionHouse.Auction._
-import auctionHouse.AuctionSearch.{RegistrationMessage, Unregister, Register}
+import auctionHouse.search.AuctionSearch
+import auctionHouse.search.AuctionSearch.{Unregister, Register, RegistrationMessage}
 import com.github.nscala_time.time.Imports._
 import sun.plugin.dom.exception.InvalidStateException
 import tools.ActorTools.ReadableActorRef
 import tools.TimeTools
 
 import scala.collection.immutable.SortedSet
-import scala.concurrent.Await
 import scala.concurrent.duration.Duration
-import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
 object Auction {
