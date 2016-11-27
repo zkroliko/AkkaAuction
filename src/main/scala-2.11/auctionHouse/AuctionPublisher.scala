@@ -15,7 +15,7 @@ class AuctionPublisher extends Actor with ActorLogging{
     case Init =>
       println(s"Auction publisher has started: ${self.path}")
     case n: Notifier.NotificationContent if n.leader.isEmpty =>
-      println(s"Publisher: ${n.name} is inactive with starting price ${n.price}")
+      println(s"Publisher: ${n.name} is inactive with price ${n.price}")
       sender ! NotificationAck
     case n: Notifier.NotificationContent if n.leader.isDefined =>
       println(s"Publisher: ${n.name} is active with price ${n.price}")

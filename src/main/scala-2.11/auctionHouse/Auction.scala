@@ -290,6 +290,7 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
     interested.filter(_ != currentWinner.getOrElse(None)).foreach {
       _ ! Lost
     }
+    notifier ! NotificationContent(description.title,price,None)
   }
 
   private def setTimer(startTime: DateTime): DateTime = {
