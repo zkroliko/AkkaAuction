@@ -15,7 +15,7 @@ class AuctionHouse extends Actor {
 
   val nSellers = 1
   val nAuctionsPerSeller = 1
-  val nBidders = 1
+  val nBidders = 4
 
   def receive = LoggingReceive {
     case Init =>

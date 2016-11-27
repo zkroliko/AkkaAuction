@@ -135,11 +135,11 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
       case BidAccepted(newValue, bidder, time) =>
         currentData match {
           case WaitingData(seller,price,interested,oldTime) =>
-            informInterested(interested,price,Some(sender))
+            informInterested(interested,price,Some(bidder))
             val endTime = setTimer(time)
             BiddingData(seller, newValue, interested + bidder, endTime, bidder)
           case BiddingData(seller,price,interested,oldTime,prevLeader) =>
-            informInterested(interested,price,Some(sender))
+            informInterested(interested,price,Some(bidder))
             val endTime = setTimer(time)
             BiddingData(seller, newValue, interested + bidder, endTime, bidder)
           case _ => throw new AssertionError
@@ -153,10 +153,11 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
         }
       case BecameSold =>
         currentData match {
-          case BiddingData(seller,price,interested,oldTime,prevLeader) =>
-            seller ! KnowThatSold(price, prevLeader)
+          case BiddingData(seller,price,interested,oldTime,leader) =>
+            informOfResult(interested,Some(leader),price)
+            seller ! KnowThatSold(price, leader)
             unregister()
-            SoldData(seller,price,Some(prevLeader),interested)
+            SoldData(seller,price,Some(leader),interested)
 //            stop(PersistentFSM.Normal)
           case _ => throw new AssertionError
         }
@@ -218,7 +219,6 @@ class Auction(description: AuctionDescription) extends PersistentFSM[State, Data
       }
     case Event(BidTimerExpired(time), BiddingData(seller,endPrice, interested, endTime, winner)) =>
       if (time == endTime) {
-        informOfResult(interested,Some(winner),endPrice)
         println(f"Timer expired for ${self.name}, item sold for '$endPrice%1.2f' at ${TimeTools.timeNow}")
         goto(Sold) applying BecameSold
       } else {
