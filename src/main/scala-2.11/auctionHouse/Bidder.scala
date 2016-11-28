@@ -5,6 +5,7 @@ import java.util.concurrent.TimeUnit
 import akka.actor.{Actor, ActorRef, Props}
 import akka.event.LoggingReceive
 import auctionHouse.Auction.{Lost, Won}
+import auctionHouse.routingBench.RoutingBench
 import auctionHouse.search.AuctionSearch
 
 import scala.collection.mutable.ListBuffer
@@ -25,7 +26,7 @@ object Bidder {
   val bidRatioMax = 1.10
 }
 
-class Bidder extends Actor with akka.actor.ActorLogging{
+class Bidder(parent: ActorRef) extends Actor with akka.actor.ActorLogging{
 
   import AuctionHouse._
   import AuctionSearch._
@@ -73,6 +74,7 @@ class Bidder extends Actor with akka.actor.ActorLogging{
   }
 
   private def lookAtDescriptions(desc: List[AuctionDescription]) = {
+    println("looking")
     context.actorSelection(AuctionSearch.path).resolveOne(searchTimeout).onComplete {
       case Success(searcher) => desc.foreach { d =>
         searcher ! Find(d.title)
@@ -94,8 +96,11 @@ class Bidder extends Actor with akka.actor.ActorLogging{
   }
 
   def receive = LoggingReceive {
-    case LookAtDescriptions(desc) => lookAtDescriptions(desc)
+    case LookAtDescriptions(desc) =>
+      println("looking")
+      lookAtDescriptions(desc)
     case SearchResult(keyword,auction) =>
+      parent ! RoutingBench.SearchFinished
       spawnInterest(auction)
     case ShouldIBid(price,profitableTo) => considerBidding(sender, price)(implicitly(profitableTo))
     case Overbid(returned) => acknowledgeOverbid(returned)

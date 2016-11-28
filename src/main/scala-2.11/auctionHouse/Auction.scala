@@ -95,10 +95,10 @@ class Auction(description: AuctionDescription) extends FSM[State, Data] {
   private def processedBid(bid: Bid, currentPrice: BigDecimal, sender: ActorRef): BidResult = {
     val proposed = bid.proposed
     if (proposed > currentPrice) {
-      println(f"Valid bid of '$proposed%1.2f' > '$currentPrice%1.2f' placed on: ${self.name}: at ${TimeTools.timeNow}")
+//      println(f"Valid bid of '$proposed%1.2f' > '$currentPrice%1.2f' placed on: ${self.name}: at ${TimeTools.timeNow}")
       BidAck(bid)
     } else {
-      println(s"Too low bid of '$proposed' placed on: ${self.name} at '$currentPrice' at ${TimeTools.timeNow}")
+//      println(s"Too low bid of '$proposed' placed on: ${self.name} at '$currentPrice' at ${TimeTools.timeNow}")
       BidNAck(bid)
     }
   }
@@ -127,7 +127,7 @@ class Auction(description: AuctionDescription) extends FSM[State, Data] {
   when(Idle) {
     case Event(Start, Uninitialized(price,interested)) =>
       val endTime = restartedTimer()
-      println(f"Auction ${self.name} for $price%1.2f created, and will end at ${TimeTools.timeFormatted(endTime)}")
+//      println(f"Auction ${self.name} for $price%1.2f created, and will end at ${TimeTools.timeFormatted(endTime)}")
       informInterested(interested,price,None)
       goto(Created) using WaitingData(sender,price,interested,endTime)
     case Event(AskingForInfo, u: Uninitialized) =>
@@ -141,7 +141,7 @@ class Auction(description: AuctionDescription) extends FSM[State, Data] {
       sender ! result
       result match {
         case BidAck(value) =>
-          println(s"Auction ${self.name} activated")
+//          println(s"Auction ${self.name} activated")
           informInterested(interested,currentPrice,Some(sender))
           goto(Activated) using BiddingData(seller, proposed, interested + sender, restartedTimer(), sender)
         case BidNAck(value) =>
@@ -149,7 +149,7 @@ class Auction(description: AuctionDescription) extends FSM[State, Data] {
       }
     case Event(BidTimerExpired(time), data : WaitingData) =>
       if (time == data.endTime) {
-        println(s"Timer expired for ${self.name} at ${TimeTools.timeFormatted(data.endTime)}, item ignored")
+//        println(s"Timer expired for ${self.name} at ${TimeTools.timeFormatted(data.endTime)}, item ignored")
         startDeleteTimer()
         goto(Ignored) using IgnoredData(data.seller,data.startingPrice,data.interested)
       } else {
@@ -174,7 +174,7 @@ class Auction(description: AuctionDescription) extends FSM[State, Data] {
     case Event(BidTimerExpired(time), BiddingData(seller,endPrice, interested, endTime, winner)) =>
       if (time == endTime) {
         informOfResult(interested,Some(winner),endPrice)
-        println(f"Timer expired for ${self.name}, item sold for '$endPrice%1.2f' at ${TimeTools.timeNow}")
+//        println(f"Timer expired for ${self.name}, item sold for '$endPrice%1.2f' at ${TimeTools.timeNow}")
         goto(Sold) using SoldData(seller, endPrice,winner)
       } else {
         stay()
@@ -189,7 +189,7 @@ class Auction(description: AuctionDescription) extends FSM[State, Data] {
       val endTime = restartedTimer()
       goto(Created) using WaitingData(seller, price,interested,endTime)
     case Event(DeleteTimerExpired,IgnoredData(seller, price,interested)) =>
-      println(s"Delete timer expired for ${self.name} at ${TimeTools.timeNow}, auction deleted")
+//      println(s"Delete timer expired for ${self.name} at ${TimeTools.timeNow}, auction deleted")
       seller ! KnowThatNotSold
       unregister()
       stop(FSM.Normal)

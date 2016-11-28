@@ -30,10 +30,10 @@ class Seller extends FSM[State,Data]{
 
   when (AfterPostingAuctions){
     case Event(k: Auction.KnowThatSold, a : AuctionListData) =>
-      println(s"${self.name} knows that ${sender.name} has been sold ")
+//      println(s"${self.name} knows that ${sender.name} has been sold ")
       stay()
     case Event(Auction.KnowThatNotSold, a : AuctionListData) =>
-      println(s"${self.name} knows that his ${sender.name} has NOT been sold ")
+//      println(s"${self.name} knows that his ${sender.name} has NOT been sold ")
       stay()
   }
   onTransition {

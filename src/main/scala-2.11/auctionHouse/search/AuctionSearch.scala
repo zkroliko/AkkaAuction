@@ -4,6 +4,7 @@ import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, ActorRef}
 import akka.event.LoggingReceive
+import auctionHouse.routingBench.RoutingBench
 
 import scala.collection.immutable.Map
 
@@ -25,7 +26,7 @@ object AuctionSearch {
   val path = "akka://auctionHouse/*/*/auctionSearch"
 }
 
-class AuctionSearch extends Actor{
+class AuctionSearch(parent: ActorRef) extends Actor{
   import AuctionSearch._
 
   var nameToAuction: Map[String,ActorRef] = scala.collection.immutable.Map[String,ActorRef]()
@@ -39,6 +40,7 @@ class AuctionSearch extends Actor{
       }
     case Register(name) =>
       nameToAuction += (name->sender)
+      parent ! RoutingBench.RegistrationFinished
     case Unregister(name) =>
       nameToAuction -= name
   }
