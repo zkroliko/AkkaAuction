@@ -34,13 +34,10 @@ class AuctionSearch extends Actor{
 
   def receive = LoggingReceive {
     case Find(keyword) =>
-      println("d")
       nameToAuction.keys.filter(_.contains(keyword)).foreach {
         r => sender ! SearchResult(keyword,nameToAuction(r))
-        println("d2")
       }
     case Register(name) =>
-      println("reg:::"+sender)
       nameToAuction += (name->sender)
     case Unregister(name) =>
       nameToAuction -= name

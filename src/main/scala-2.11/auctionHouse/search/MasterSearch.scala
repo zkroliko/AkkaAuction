@@ -31,8 +31,8 @@ class MasterSearch(numberOfWorkers: Int, dispatchingStrategy: RoutingLogic) exte
     case m@Find(keyword) =>
       router.route(m, sender())
     case m@Register(name) =>
-      router.route(Broadcast(m), self)
+      router.route(Broadcast(m), sender)
     case m@Unregister(name) =>
-      router.route(Broadcast(m), self)
+      router.route(Broadcast(m), sender)
   }
 }
