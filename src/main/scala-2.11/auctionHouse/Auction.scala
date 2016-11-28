@@ -19,7 +19,7 @@ import scala.util.{Failure, Success}
 object Auction {
 
   val registerTimeout = Duration.create(1,TimeUnit.SECONDS)
-  val bidWaitDuration = Duration.create(5,TimeUnit.SECONDS)
+  val bidWaitDuration = Duration.create(50,TimeUnit.SECONDS)
   val ignoredDuration = Duration.create(10,TimeUnit.SECONDS)
 
   case object Start

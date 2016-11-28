@@ -39,14 +39,15 @@ class MasterSearch(numberOfWorkers: Int, dispatchingStrategy: RoutingLogic, pare
 
   def receive = LoggingReceive {
     case m@Find(keyword) =>
-      router.route(m, sender())
+      router.route(m, sender)
     case m@Register(name) =>
       router.route(Broadcast(m), sender)
     case m@Unregister(name) =>
       router.route(Broadcast(m), sender)
     case RoutingBench.RegistrationFinished =>
       registrationAcks += 1
-      println(registrationAcks + " registrations")
+      if (registrationAcks % 1000 == 0)
+        println(registrationAcks + " registrations")
       if (finished) {
         parent ! RegistrationFinished
       }

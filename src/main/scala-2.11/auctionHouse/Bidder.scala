@@ -9,7 +9,6 @@ import auctionHouse.routingBench.RoutingBench
 import auctionHouse.search.AuctionSearch
 
 import scala.collection.mutable.ListBuffer
-import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 import scala.util.{Failure, Random, Success}
@@ -28,10 +27,11 @@ object Bidder {
 
 class Bidder(parent: ActorRef) extends Actor with akka.actor.ActorLogging{
 
-  import AuctionHouse._
   import AuctionSearch._
   import Bidder._
   import BidderInterest._
+
+  println("Bidder alive at " + self.path)
 
   def randomBidRatio = bidRatioMin+Random.nextDouble*(bidRatioMax-bidRatioMin)
 
@@ -96,12 +96,12 @@ class Bidder(parent: ActorRef) extends Actor with akka.actor.ActorLogging{
   }
 
   def receive = LoggingReceive {
-    case LookAtDescriptions(desc) =>
+    case RoutingBench.LookAtDescriptions(desc) =>
       println("looking")
       lookAtDescriptions(desc)
     case SearchResult(keyword,auction) =>
       parent ! RoutingBench.SearchFinished
-      spawnInterest(auction)
+//      spawnInterest(auction)
     case ShouldIBid(price,profitableTo) => considerBidding(sender, price)(implicitly(profitableTo))
     case Overbid(returned) => acknowledgeOverbid(returned)
     case Won(price) => acknowledgeWinning(sender)
